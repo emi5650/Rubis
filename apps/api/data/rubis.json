@@ -1,0 +1,208 @@
+{
+  "campaigns": [
+    {
+      "id": "a183fbbf-bd60-49eb-98fb-9a14ddfe34db",
+      "name": "Test",
+      "language": "fr",
+      "framework": "PASSI",
+      "createdAt": "2026-02-20T15:19:19.324Z"
+    },
+    {
+      "id": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "name": "Campagne Démo Rubis",
+      "language": "fr",
+      "framework": "PASSI v2.2",
+      "createdAt": "2026-02-20T14:52:59.826Z"
+    }
+  ],
+  "criteria": [
+    {
+      "id": "e932123e-291f-45b6-832a-234cb2b3d681",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "code": "A.5.1",
+      "title": "Politique de sécurité",
+      "theme": "Gouvernance"
+    }
+  ],
+  "questions": [
+    {
+      "id": "c75adc7f-029a-4c22-8ba9-db6e52da2302",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "criterionId": "e932123e-291f-45b6-832a-234cb2b3d681",
+      "audienceRole": "RSSI",
+      "language": "fr",
+      "text": "Comment la politique de sécurité est-elle déclinée en procédures opérationnelles ?",
+      "weight": 1
+    }
+  ],
+  "documents": [
+    {
+      "id": "a8986820-5d55-45a9-bbcc-67b4a50ceda3",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "name": "PSSI",
+      "theme": "Gouvernance",
+      "version": "1.0",
+      "date": "2026-02-20",
+      "sensitivity": "Interne",
+      "summary": "Politique de sécurité du SI"
+    }
+  ],
+  "metricScales": [
+    {
+      "id": "c368e358-12e1-42a0-9ddf-59a1762dfab0",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "confidentiality": "1-5",
+      "integrity": "1-5",
+      "availability": "1-5",
+      "evidence": "0-3"
+    }
+  ],
+  "conventions": [
+    {
+      "id": "7d72839f-958e-4b52-b56f-4f9e940c5d71",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "auditedOrganization": "Entité auditée démo",
+      "sponsorOrganization": "Commanditaire démo",
+      "auditType": "interne",
+      "perimeter": "SI central",
+      "constraints": "Aucune",
+      "mode": "hybride"
+    }
+  ],
+  "scopingNotes": [
+    {
+      "id": "62161ea5-3794-43b2-b84a-bd3f21499098",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "objectives": "Evaluer la maturité cyber",
+      "assumptions": "Contexte stable",
+      "exclusions": "Aucune",
+      "stakeholders": "DSI,RSSI",
+      "planningConstraints": "2 semaines"
+    }
+  ],
+  "interviewees": [
+    {
+      "id": "6dab618f-3953-4882-88a3-d7d4be8ce6a1",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "fullName": "Alice Martin",
+      "role": "RSSI",
+      "email": "alice.martin@example.com",
+      "entity": "DSI"
+    }
+  ],
+  "documentReviews": [
+    {
+      "id": "2ae1e8e1-c7b5-4479-ad92-ad41743a66a6",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "documentId": "a8986820-5d55-45a9-bbcc-67b4a50ceda3",
+      "maturityLevel": "Intermédiaire",
+      "complianceLevel": "Partielle",
+      "pointsToInvestigate": "Validation formelle annuelle",
+      "preliminaryVerdict": "À approfondir en entretien"
+    }
+  ],
+  "auditPlans": [
+    {
+      "id": "b9016f69-548d-490b-a0aa-9915d648737c",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "objectives": "Vérifier la conformité des contrôles",
+      "scope": "Périmètre infrastructure et gouvernance",
+      "methods": "Analyse doc + entretiens",
+      "samplingStrategy": "Basée sur les risques",
+      "logistics": "2 jours sur site",
+      "communicationRules": "Point quotidien"
+    }
+  ],
+  "interviewSlots": [
+    {
+      "id": "e9099d76-e904-4ffa-b7d9-f0e974b446d5",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "title": "Entretien RSSI",
+      "startAt": "2026-03-01T09:00:00Z",
+      "endAt": "2026-03-01T10:00:00Z",
+      "mode": "hybride",
+      "room": "Salle 3",
+      "teamsLink": "",
+      "theme": "Gouvernance",
+      "criterionCode": "A.5.1",
+      "participantIds": [
+        "6dab618f-3953-4882-88a3-d7d4be8ce6a1"
+      ],
+      "associatedDocumentIds": [
+        "a8986820-5d55-45a9-bbcc-67b4a50ceda3"
+      ],
+      "outlookSyncEnabled": false,
+      "outlookEventId": ""
+    }
+  ],
+  "interviewNotes": [
+    {
+      "id": "3809dd3f-cd4e-4655-98a9-482777173da8",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "slotId": "e9099d76-e904-4ffa-b7d9-f0e974b446d5",
+      "startedAt": "2026-03-01T09:00:00Z",
+      "endedAt": "2026-03-01T10:00:00Z",
+      "pauses": [],
+      "freeNotes": "Entretien démo"
+    }
+  ],
+  "attendances": [
+    {
+      "id": "5ab85370-8b3d-4be6-8632-522b76a787b9",
+      "interviewNoteId": "3809dd3f-cd4e-4655-98a9-482777173da8",
+      "intervieweeId": "6dab618f-3953-4882-88a3-d7d4be8ce6a1",
+      "intervieweeName": "Alice Martin",
+      "planned": true,
+      "present": true
+    }
+  ],
+  "pendingDocuments": [
+    {
+      "id": "82fa872f-98fc-4046-a5b5-b8b9bb525bbb",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "interviewNoteId": "3809dd3f-cd4e-4655-98a9-482777173da8",
+      "name": "Procédure de gestion des incidents",
+      "requestedFrom": "RSSI",
+      "dueDate": "2026-03-05",
+      "transmittedDate": "",
+      "status": "requested"
+    }
+  ],
+  "interviewDocumentReferences": [],
+  "interviewAnswers": [
+    {
+      "id": "9138d9d5-96f3-4f49-89e2-3ebb815257e0",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "interviewNoteId": "3809dd3f-cd4e-4655-98a9-482777173da8",
+      "questionId": "c75adc7f-029a-4c22-8ba9-db6e52da2302",
+      "conformityScore": 3,
+      "comment": "Maturité moyenne"
+    }
+  ],
+  "auditReports": [
+    {
+      "id": "cb0bdbb5-6d09-468c-ad78-d7d501fb668b",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "title": "Rapport - Campagne Démo Rubis",
+      "generatedAt": "2026-02-20T14:57:57.785Z",
+      "version": "0.1",
+      "content": "# Rapport d'audit - Campagne Démo Rubis\n\n- Référentiel: PASSI v2.2\n- Langue: fr\n- Généré le: 2026-02-20T14:57:57.784Z\n\n## 1. Contexte\n- Objectif campagne: Campagne Démo Rubis\n- Convention auditée/commanditaire: Entité auditée démo / Commanditaire démo\n- Périmètre: SI central\n- Objectifs note de cadrage: Evaluer la maturité cyber\n\n## 2. Analyse documentaire\n- Nombre de documents référencés: 1\n- Nombre de revues documentaires: 1\n- Documents en attente: 1\n\n## 3. Synthèse des entretiens\n- Nombre de notes d'entretien: 1\n\n## 4. Conformité par critère\n- A.5.1 (Gouvernance) - Politique de sécurité: score pondéré 3.00 (1 questions notées)\n\n## 5. Limites et actions\n- Ce rapport est une génération initiale MVP.\n- Les sections finales de recommandation et conclusion sont à compléter par l'auditeur."
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "1e24ea8d-ddde-493c-8df0-718ab4e7cbb9",
+      "campaignId": "a183fbbf-bd60-49eb-98fb-9a14ddfe34db",
+      "action": "campaign.created",
+      "timestamp": "2026-02-20T15:19:19.327Z",
+      "details": "Test"
+    },
+    {
+      "id": "db0a82e5-9e1d-44c8-8f8c-d9f8d5594bb0",
+      "campaignId": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
+      "action": "audit-report.generated",
+      "timestamp": "2026-02-20T14:57:57.787Z",
+      "details": "cb0bdbb5-6d09-468c-ad78-d7d501fb668b"
+    }
+  ]
+}

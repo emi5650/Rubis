@@ -1,0 +1,22 @@
+{
+  "name": "rubis",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @rubis/api\" \"npm run dev -w @rubis/web\"",
+    "dev:api": "npm run dev -w @rubis/api",
+    "dev:web": "npm run dev -w @rubis/web",
+    "db:reset": "npm run db:reset -w @rubis/api",
+    "db:seed:demo": "npm run db:seed:demo -w @rubis/api",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
