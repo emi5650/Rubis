@@ -1015,6 +1015,34 @@ app.post("/generate-questions-from-referential", async (request, reply) => {
   }
 });
 
+// Model configuration state - can be changed at runtime
+let currentOllamaModel = process.env.OLLAMA_MODEL || "mistral";
+
+app.get("/config", async () => ({
+  ollamaModel: currentOllamaModel
+}));
+
+app.post("/config", async (request, reply) => {
+  const bodySchema = z.object({
+    ollamaModel: z.string().min(2)
+  });
+
+  const body = bodySchema.parse(request.body);
+  currentOllamaModel = body.ollamaModel;
+  
+  app.log.info(`Ollama model changed to: ${currentOllamaModel}`);
+  
+  return reply.code(200).send({
+    ollamaModel: currentOllamaModel,
+    message: `Model switched to ${currentOllamaModel}`
+  });
+});
+
+// Export for use in other modules
+export function getOllamaModel() {
+  return currentOllamaModel;
+}
+
 const port = Number(process.env.API_PORT || 4000);
 
 app.listen({ port, host: "0.0.0.0" }).catch((error) => {

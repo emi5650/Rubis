@@ -1,12 +1,12 @@
 import OpenAI from "openai";
 import { z } from "zod";
+import { getOllamaModel } from "../server.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || ""
 });
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral:7b-q4_0";
 
 export interface GenerateQuestionsInput {
   referentialContent: string;
@@ -79,7 +79,7 @@ Return ONLY valid JSON with no markdown formatting or additional text.`;
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model: getOllamaModel(),
         prompt: userPrompt,
         system: systemPrompt,
         stream: false

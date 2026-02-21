@@ -1,0 +1,30 @@
+﻿```json
+[
+  {
+    "text": "Pouvez-vous d├®crire les proc├®dures mises en place pour contr├┤ler l'acc├¿s physique aux locaux o├╣ sont stock├®es les informations sensibles ?",
+    "guidance": "Cette question vise ├á ├®valuer la s├®curit├® physique des donn├®es. Recherchez des contr├┤les tels que la surveillance par vid├®o, les badges d'acc├¿s, les restrictions d'acc├¿s par zone, et les politiques de verrouillage des locaux.",
+    "theme": "Contr├┤le d'acc├¿s et gestion des identit├®s"
+  },
+  {
+    "text": "Quelles sont les proc├®dures de gestion des comptes d'utilisateurs, de la cr├®ation ├á la suppression, et comment ces proc├®dures sont-elles document├®es et suivies ?",
+    "guidance": "├ëvaluez la formalit├® et la conformit├® des processus de gestion des comptes. V├®rifiez l'existence de demandes d'acc├¿s formelles, d'approbations et de suivis des comptes inactifs.",
+    "theme": "Contr├┤le d'acc├¿s et gestion des identit├®s"
+  },
+  {
+    "text": "Comment votre organisation g├¿re-t-elle les changements de r├┤les et d'autorisations des utilisateurs et comment ces changements sont-ils audit├®s ?",
+    "guidance": "Cette question porte sur la gestion des droits d'acc├¿s. Examinez les processus de demande de changement, les approbations n├®cessaires et si des audits des droits d'acc├¿s sont r├®alis├®s r├®guli├¿rement.",
+    "theme": "Contr├┤le d'acc├¿s et gestion des identit├®s"
+  },
+  {
+    "text": "Quelles mesures de s├®curit├® sont mises en ┼ôuvre pour v├®rifier l'identit├® des utilisateurs avant de leur accorder l'acc├¿s aux syst├¿mes et aux donn├®es ?",
+    "guidance": "Explorez les m├®thodes d'authentification utilis├®es, telles que les mots de passe forts, l'authentification multi-facteurs, et l'utilisation de certificats num├®riques. V├®rifiez si des politiques de mot de passe sont appliqu├®es et respect├®es.",
+    "theme": "Contr├┤le d'acc├¿s et gestion des identit├®s"
+  },
+  {
+    "text": "Comment votre organisation g├¿re-t-elle les identit├®s des utilisateurs externes (fournisseurs, consultants) et quelles sont les limites d'acc├¿s accord├®es ├á ces identit├®s ?",
+    "guidance": "V├®rifiez la proc├®dure d'int├®gration des utilisateurs externes, les droits d'acc├¿s accord├®s, et les revues p├®riodiques de ces droits. Assurez-vous qu'il existe des m├®canismes pour la r├®vocation rapide des acc├¿s en cas de d├®part d'un fournisseur.",
+    "theme": "Contr├┤le d'acc├¿s et gestion des identit├®s"
+  }
+]
+```
+

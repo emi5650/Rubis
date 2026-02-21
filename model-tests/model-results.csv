@@ -1,0 +1,3 @@
+﻿"Model","Seconds","Chars","IsValidJson","ItemCount","MissingKeys","Score","OutputFile","Error"
+"mistral","135,9","1602","True","5","","60","C:\VS_Code\Rubis\model-tests\mistral.txt",""
+"gemma3:4b","81","2484","False","0","","0","C:\VS_Code\Rubis\model-tests\gemma3_4b.txt","Primitive JSON non valide : ."

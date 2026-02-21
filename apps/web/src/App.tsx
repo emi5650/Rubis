@@ -9,6 +9,8 @@ export function App() {
   const [campaignId, setCampaignId] = useState("");
   const [criterionId, setCriterionId] = useState("");
   const [language, setLanguage] = useState<Language>("fr");
+  const [ollamaModel, setOllamaModel] = useState("mistral");
+  const [ollamaModels, setOllamaModels] = useState<string[]>(["mistral", "gemma3:4b"]);
   const [generated, setGenerated] = useState<string[]>([]);
   const [documents, setDocuments] = useState<Array<{ id: string; name: string; theme: string; sensitivity: string }>>([]);
   const [interviewees, setInterviewees] = useState<Array<{ id: string; fullName: string; role: string }>>([]);
@@ -94,6 +96,16 @@ export function App() {
       return;
     }
 
+    // Load current Ollama model on campaign change
+    async function loadConfig() {
+      try {
+        const config = await requestJson<{ ollamaModel: string }>(`${API_URL}/config`);
+        setOllamaModel(config.ollamaModel);
+      } catch (error) {
+        console.error("Failed to load config:", error);
+      }
+    }
+
     async function loadCampaignData() {
       try {
         setErrorMessage("");
@@ -114,6 +126,7 @@ export function App() {
       }
     }
 
+    void loadConfig();
     void loadCampaignData();
   }, [campaignId, logPeriod, logActionFilter]);
 
@@ -188,6 +201,21 @@ export function App() {
       setStatus("Questions générées");
     } catch (error) {
       setErrorMessage(`Génération de questions impossible: ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function switchOllamaModel(modelName: string) {
+    try {
+      setErrorMessage("");
+      await requestJson<{ ollamaModel: string }>(`${API_URL}/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ollamaModel: modelName })
+      });
+      setOllamaModel(modelName);
+      setStatus(`Modèle Ollama changé: ${modelName}`);
+    } catch (error) {
+      setErrorMessage(`Impossible de changer le modèle: ${getErrorMessage(error)}`);
     }
   }
 
@@ -945,6 +973,32 @@ export function App() {
             <li key={question}>{question}</li>
           ))}
         </ul>
+      </section>
+
+      <section className="card">
+        <h2>Configuration IA</h2>
+        <div>
+          <label>Modèle Ollama actuel: <strong>{ollamaModel}</strong></label>
+          <div style={{ marginTop: "10px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            {ollamaModels.map((model) => (
+              <button
+                key={model}
+                onClick={() => switchOllamaModel(model)}
+                style={{
+                  padding: "8px 12px",
+                  backgroundColor: ollamaModel === model ? "#4CAF50" : "#ddd",
+                  color: ollamaModel === model ? "white" : "black",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "14px"
+                }}
+              >
+                {model}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="card">

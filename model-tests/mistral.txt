@@ -1,0 +1,28 @@
+﻿ [
+  {
+    "text": "Est-ce que les contr├┤les de acc├¿s sont d├®finis pour tous les utilisateurs dans l'entreprise ?",
+    "guidance": "V├®rifiez que chaque utilisateur a des autorisations sp├®cifi├®es et qu'il est impossible d'acc├®der ├á des ressources sans ├¬tre authentifi├®.",
+    "theme": "Controle d'acces et gestion des identites"
+  },
+  {
+    "text": "Est-ce que les mots de passe sont r├®guli├¿rement chang├®s pour les utilisateurs ?",
+    "guidance": "V├®rifiez que chaque utilisateur a un mot de passe fort et qu'il est r├®guli├¿rement mis ├á jour.",
+    "theme": "Controle d'acces et gestion des identites"
+  },
+  {
+    "text": "Est-ce que les comptes inactifs sont d├®sactiv├®s apr├¿s un certain d├®lai ?",
+    "guidance": "V├®rifiez qu'un utilisateur inactif est d├®sactiv├® et ne peut plus acc├®der aux ressources de l'entreprise.",
+    "theme": "Controle d'acces et gestion des identites"
+  },
+  {
+    "text": "Est-ce que les syst├¿mes d'identit├® sont mis ├á jour r├®guli├¿rement pour r├®pondre aux menaces actuelles ?",
+    "guidance": "V├®rifiez que les syst├¿mes d'identit├® sont s├®curis├®s et mis ├á jour pour r├®pondre aux menaces actuelles.",
+    "theme": "Controle d'acces et gestion des identites"
+  },
+  {
+    "text": "Est-ce que les utilisateurs ont acc├¿s ├á leur propre page de profil avec le contr├┤le de modification de leurs informations ?",
+    "guidance": "V├®rifiez que chaque utilisateur a acc├¿s ├á sa propre page de profil pour modifier ses informations personnelles.",
+    "theme": "Controle d'acces et gestion des identites"
+  }
+]
+
