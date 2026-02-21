@@ -1,0 +1,290 @@
+{
+  "auditConclusions": [
+    {
+      "id": "conform",
+      "label": "Conforme",
+      "description": "L'exigence est satisfaite [ISO 19011-2018 :3.20]. Les preuves apportées permettent de conclure à la conformité du critère.",
+      "color": "#90EE90",
+      "colorCode": "light-green",
+      "order": 1
+    },
+    {
+      "id": "remark",
+      "label": "Remarque",
+      "description": "Dysfonctionnement potentiel non décelé par l'audit ou qui ne fait pas l'objet d'une exigence dans les critères d'audit, et qui fait courir un risque limité sur le système. Inadéquation entre la situation constatée et le critère d'audit n'affecte pas directement le système. Défaillance constatée certainement due à un oubli ponctuel et n'est pas systématique.",
+      "color": "#7FD77F",
+      "colorCode": "medium-green",
+      "order": 2
+    },
+    {
+      "id": "minor-nc",
+      "label": "Non-conformité mineure",
+      "description": "L'exigence n'est pas satisfaite [ISO 19011-2018 :3.21]. Les preuves apportées par l'audit ne permettent pas de conclure à la conformité au critère. Cette défaillance entraîne un niveau de risque important au maximum.",
+      "color": "#FFD700",
+      "colorCode": "orange",
+      "order": 3
+    },
+    {
+      "id": "major-nc",
+      "label": "Non-conformité majeure",
+      "description": "L'exigence n'est pas satisfaite [ISO 19011-2018 :3.21]. Les preuves apportées par l'audit ne permettent pas de conclure à la conformité au critère. Cette défaillance entraîne un niveau de risque au moins majeur.",
+      "color": "#FF0000",
+      "colorCode": "red",
+      "order": 4
+    },
+    {
+      "id": "not-applicable",
+      "label": "Non Applicable",
+      "description": "L'exigence n'est pas applicable ou n'a pas été auditée",
+      "color": "#F5F5F5",
+      "colorCode": "light-gray",
+      "order": 5
+    }
+  ],
+  "exploitationDifficulty": [
+    {
+      "id": "easy",
+      "label": "Facile",
+      "description": "Exploitation triviale, sans outil particulier",
+      "color": "#FF0000",
+      "colorCode": "red",
+      "order": 1
+    },
+    {
+      "id": "moderate",
+      "label": "Modérée",
+      "description": "Exploitation nécessitant des techniques simples et des outils disponibles publiquement",
+      "color": "#FFA500",
+      "colorCode": "orange",
+      "order": 2
+    },
+    {
+      "id": "elevated",
+      "label": "Élevée",
+      "description": "Exploitation de vulnérabilités publiques nécessitant des compétences en sécurité des systèmes d'information et le développement d'outils simples",
+      "color": "#FFFF00",
+      "colorCode": "yellow",
+      "order": 3
+    },
+    {
+      "id": "difficult",
+      "label": "Difficile",
+      "description": "Exploitation de vulnérabilités non publiées nécessitant une expertise en sécurité des systèmes d'information et le développement d'outils spécifiques et ciblés",
+      "color": "#4169E1",
+      "colorCode": "dark-blue",
+      "order": 4
+    }
+  ],
+  "impact": [
+    {
+      "id": "critical",
+      "label": "Critique",
+      "description": "Conséquences généralisées sur l'ensemble du système d'information audité",
+      "color": "#FF0000",
+      "colorCode": "red",
+      "order": 1
+    },
+    {
+      "id": "major",
+      "label": "Majeur",
+      "description": "Conséquences restreintes sur une partie du système d'information audité",
+      "color": "#FFA500",
+      "colorCode": "orange",
+      "order": 2
+    },
+    {
+      "id": "important",
+      "label": "Important",
+      "description": "Conséquences isolées sur des points précis du système d'information audité",
+      "color": "#FFFF00",
+      "colorCode": "yellow",
+      "order": 3
+    },
+    {
+      "id": "minor",
+      "label": "Mineur",
+      "description": "Pas de conséquence directe sur la sécurité du système d'information audité",
+      "color": "#F5F5F5",
+      "colorCode": "light-gray",
+      "order": 4
+    }
+  ],
+  "implementationComplexity": [
+    {
+      "id": "complete",
+      "label": "Complète",
+      "description": "Des compétences spécifiques sont nécessaires pour la mise en œuvre, un investissement important est à prévoir en termes de ressource, de temps ou d'agents.",
+      "color": "#FF0000",
+      "colorCode": "red"
+    },
+    {
+      "id": "elevated",
+      "label": "Élevée",
+      "description": "Des compétences spécifiques sont nécessaires pour la mise en œuvre, la mise en œuvre peut être coûteuse en temps et ressources. Peut nécessiter la collaboration de plusieurs services",
+      "color": "#FFA500",
+      "colorCode": "orange"
+    },
+    {
+      "id": "moderate",
+      "label": "Modérée",
+      "description": "Peut nécessiter des compétences standards ou la collaboration de plusieurs personnes ou services.",
+      "color": "#FFFF00",
+      "colorCode": "yellow"
+    },
+    {
+      "id": "easy",
+      "label": "Facile",
+      "description": "Ne nécessite pas de compétence particulière et peut être mis en œuvre sans déployer de moyens conséquents",
+      "color": "#F5F5F5",
+      "colorCode": "light-gray"
+    }
+  ],
+  "implementationPriority": [
+    {
+      "id": "urgent",
+      "label": "Urgent",
+      "description": "La mise en œuvre de la mesure est jugée prioritaire et des ressources devrait y être consacrées au plus vite. La mesure doit permettre de corriger une vulnérabilité majeure ou critique",
+      "color": "#FF0000",
+      "colorCode": "red"
+    },
+    {
+      "id": "short-term",
+      "label": "Court terme",
+      "description": "La mise en œuvre de la mesure devrait être effectuée dans le mois. La mesure doit permettre de corriger un risque jugé important.",
+      "color": "#FFA500",
+      "colorCode": "orange"
+    },
+    {
+      "id": "medium-term",
+      "label": "Moyen terme",
+      "description": "Cette mesure n'est pas particulièrement critique ou peut nécessiter du temps pour la transformation. Une planification dans le semestre est à prévoir",
+      "color": "#FFFF00",
+      "colorCode": "yellow"
+    },
+    {
+      "id": "long-term",
+      "label": "Long terme",
+      "description": "Cette mesure n'est pas prioritaire ou doit s'étudier dans les temps long. La mesure pourrait être envisagée dans le cadre d'un plan triennal de mise en place de la sécurité.",
+      "color": "#F5F5F5",
+      "colorCode": "light-gray"
+    }
+  ],
+  "conformityLevel": [
+    {
+      "id": "very-satisfactory",
+      "label": "Très satisfaisant",
+      "description": "Le système d'information démontre un niveau de conformité supérieur à 90% aux critères d'audits et aucune non-conformité importante n'a été identifiée",
+      "color": "#00AA00",
+      "colorCode": "dark-green"
+    },
+    {
+      "id": "satisfactory",
+      "label": "Satisfaisant",
+      "description": "Le système d'information démontre un niveau de conformité supérieur à 90% à l'arrêté sectoriel et aucune non-conformité majeure n'a été identifiée",
+      "color": "#90EE90",
+      "colorCode": "light-green"
+    },
+    {
+      "id": "perfectible",
+      "label": "Perfectible",
+      "description": "Le système d'information démontre un niveau de conformité inférieur à 90% à l'arrêté sectoriel et aucune non-conformité majeure n'a été identifiée",
+      "color": "#FFD700",
+      "colorCode": "gold"
+    },
+    {
+      "id": "insufficient",
+      "label": "Insuffisant",
+      "description": "Le système d'information démontre un niveau de conformité inférieur à 50% à l'arrêté sectoriel ou des non-conformités majeures ont été identifiées",
+      "color": "#FFA500",
+      "colorCode": "orange"
+    },
+    {
+      "id": "very-insufficient",
+      "label": "Très insuffisant",
+      "description": "Le système d'information ne dispose d'aucune mesure de sécurité suffisante pour bloquer certaines attaques ayant pour conséquence la compromission partielle ou totale de votre SI. Des corrections doivent être apportées dans les plus brefs délais.",
+      "color": "#FF0000",
+      "colorCode": "red"
+    }
+  ],
+  "securityLevel": [
+    {
+      "id": "very-satisfactory",
+      "label": "Très satisfaisant",
+      "description": "La cible de l'audit répond parfaitement à l'état de l'art de la sécurité face à de l'intrusion en termes réseau, système et applicatif",
+      "color": "#00AA00",
+      "colorCode": "dark-green"
+    },
+    {
+      "id": "satisfactory",
+      "label": "Satisfaisant",
+      "description": "La cible de l'audit répond à l'état de l'art de la sécurité face à de l'intrusion. Cependant, quelques améliorations permettront d'améliorer encore d'avantage votre niveau général.",
+      "color": "#90EE90",
+      "colorCode": "light-green"
+    },
+    {
+      "id": "average",
+      "label": "Moyen",
+      "description": "La cible de l'audit ne répond que partiellement à l'état de l'art de la sécurité face à de l'intrusion. Des corrections notables sont à prévoir pour améliorer le niveau de sécurité général de votre SI.",
+      "color": "#FFD700",
+      "colorCode": "gold"
+    },
+    {
+      "id": "weak",
+      "label": "Faible",
+      "description": "La cible de l'audit est exposée à des attaques dont les conséquences peuvent être non négligeables. Des corrections doivent être apportées à court terme afin de supprimer les vulnérabilités détectées.",
+      "color": "#FFA500",
+      "colorCode": "orange"
+    },
+    {
+      "id": "very-weak",
+      "label": "Très faible",
+      "description": "La cible de l'audit ne dispose d'aucune mesure de sécurité suffisante pour bloquer certaines attaques ayant pour conséquence la compromission partielle ou totale de votre SI. Des corrections doivent être apportées dans les plus brefs délais.",
+      "color": "#FF0000",
+      "colorCode": "red"
+    }
+  ],
+  "riskMatrix": {
+    "description": "Matrice 2D de calcul du niveau de risque (Impact × Facilité d'exploitation)",
+    "rows": ["Mineur", "Important", "Majeur", "Critique"],
+    "columns": ["Difficile", "Élevée", "Modérée", "Facile"],
+    "matrix": [
+      ["Mineur", "Mineur", "Important", "Majeur"],
+      ["Mineur", "Important", "Important", "Majeur"],
+      ["Important", "Majeur", "Majeur", "Critique"],
+      ["Important", "Majeur", "Critique", "Critique"]
+    ]
+  },
+  "cvssRiskScale": {
+    "description": "Échelle de risque CVSS 3.1 pour tests d'intrusion",
+    "levels": [
+      {
+        "scoreRange": "9.0-10.0",
+        "label": "Critique",
+        "color": "#FF0000",
+        "colorCode": "red",
+        "description": "Risque critique sur le système d'information et nécessitant une correction immédiate ou imposant un arrêt immédiat du service."
+      },
+      {
+        "scoreRange": "7.0-8.9",
+        "label": "Majeur",
+        "color": "#FFA500",
+        "colorCode": "orange",
+        "description": "Risque majeur sur le système d'information nécessitant une correction à court terme."
+      },
+      {
+        "scoreRange": "4.0-6.9",
+        "label": "Important",
+        "color": "#FFFF00",
+        "colorCode": "yellow",
+        "description": "Risque modéré sur le système d'information et nécessitant une correction à moyen terme."
+      },
+      {
+        "scoreRange": "0.1-3.9",
+        "label": "Mineur",
+        "color": "#F5F5F5",
+        "colorCode": "light-gray",
+        "description": "Faible risque sur le système d'information et pouvant nécessiter une correction."
+      }
+    ]
+  }
+}
