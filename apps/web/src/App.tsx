@@ -937,7 +937,42 @@ export function App() {
         <h2>Créer une campagne</h2>
         <form onSubmit={createCampaign}>
           <input name="name" placeholder="Nom de campagne" required />
-          <input name="framework" placeholder="Référentiel (ex: PASSI)" required />
+          <select name="framework" required>
+            <option value="">-- Sélectionner un référentiel --</option>
+            <optgroup label="ISO/IEC">
+              <option value="ISO/IEC 27001">ISO/IEC 27001 - Management de la sécurité de l'information</option>
+              <option value="ISO/IEC 27002">ISO/IEC 27002 - Code de bonnes pratiques</option>
+              <option value="ISO/IEC 27005">ISO/IEC 27005 - Gestion des risques</option>
+              <option value="ISO 19011">ISO 19011 - Lignes directrices pour l'audit</option>
+            </optgroup>
+            <optgroup label="France - Réglementaire">
+              <option value="PASSI">PASSI - Prestataire d'Audit de la SSI</option>
+              <option value="LPM">LPM - Loi de Programmation Militaire + Arrêté sectoriel</option>
+              <option value="II901">II901 - Instruction Interministérielle (Classification Défense)</option>
+              <option value="ANSSI">ANSSI - Règles et recommandations</option>
+              <option value="HDS">HDS - Hébergement de Données de Santé</option>
+              <option value="RGS">RGS - Référentiel Général de Sécurité</option>
+            </optgroup>
+            <optgroup label="Luxembourg">
+              <option value="CSSF 21/768">CSSF Circulaire 21/768 - Secteur financier</option>
+              <option value="CSSF 17/654">CSSF Circulaire 17/654 - PSF</option>
+            </optgroup>
+            <optgroup label="Union Européenne">
+              <option value="NIS2">NIS2 - Network and Information Security Directive</option>
+              <option value="GDPR">GDPR/RGPD - Protection des données personnelles</option>
+              <option value="DORA">DORA - Digital Operational Resilience Act</option>
+            </optgroup>
+            <optgroup label="International">
+              <option value="NIST CSF">NIST Cybersecurity Framework</option>
+              <option value="CIS Controls">CIS Controls - Center for Internet Security</option>
+              <option value="SOC 2">SOC 2 - Service Organization Control</option>
+              <option value="PCI-DSS">PCI-DSS - Payment Card Industry Data Security</option>
+              <option value="COBIT">COBIT - Control Objectives for IT</option>
+            </optgroup>
+            <optgroup label="Autre">
+              <option value="Custom">Référentiel personnalisé</option>
+            </optgroup>
+          </select>
           <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
             <option value="fr">Français</option>
             <option value="en">English</option>

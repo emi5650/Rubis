@@ -7,3 +7,7 @@ dist/
 *.db-wal
 coverage/
 .vscode/*.log
+
+# Excel temporary files
+~$*.xlsx
+~$*.xls
