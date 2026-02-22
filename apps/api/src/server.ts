@@ -6,8 +6,8 @@ import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { z } from "zod";
-import { readFileSync } from "node:fs";
 import { db } from "./db.js";
+import { ROADMAP_DATA } from "./roadmap-data.js";
 import { generateFallbackQuestions } from "./services/questionGenerator.js";
 import { generateQuestionsFromReferential } from "./services/openai.js";
 import { parseReferentialFile } from "./services/referentialParser.js";
@@ -62,14 +62,12 @@ app.post("/campaigns", async (request, reply) => {
 
 app.get("/campaigns", async () => db.data.campaigns);
 
-// Roadmap endpoint - serve the generated roadmap.json
-let roadmapData: any[] = [];
-try {
-  const roadmapPath = new URL('../../../data/roadmap.json', import.meta.url).pathname;
-  const roadmapJson = readFileSync(roadmapPath, 'utf-8');
-  roadmapData = JSON.parse(roadmapJson);
-} catch (err) {
-  console.warn("⚠️ roadmap.json not found, roadmap endpoint will be empty");
+// Roadmap data - imported from generated module
+const roadmapData = ROADMAP_DATA || [];
+if (roadmapData.length > 0) {
+  console.log(`✅ Roadmap loaded: ${roadmapData.length} specifications`);
+} else {
+  console.warn("⚠️ Roadmap is empty - generate it with 'node generate-roadmap.mjs'");
 }
 
 app.get("/roadmap", async () => roadmapData);

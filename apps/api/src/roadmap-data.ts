@@ -1,4 +1,4 @@
-[
+export const ROADMAP_DATA = [
   {
     "ID": "REQ-001",
     "Domaine": "Cœur métier",
@@ -683,4 +683,4 @@
     "Notes": "Contrat formel signé par les deux parties. Évite malentendus. IA génère le brouillon standard, user personnalise par contexte. Signatures électroniques (e-sign via DocuSign intégration ultérieurement). À signer avant phase 1.2 (entretiens).",
     "order": 57
   }
-]
+];

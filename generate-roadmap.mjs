@@ -56,7 +56,10 @@ const specifications = [
   { "domain":"Persévérance & Facilité","feature":"One-command installation","description":"Non-tech user peut installer Rubis complet en 1 commande","priority":"P2","status":"Complété","implementation":".\\\n install-ollama.ps1 détecte, installe Ollama, download Mistral, setup env.","notes":"~30min première fois (download 2.3GB Mistral). ~5min après."},
   { "domain":"Persévérance & Facilité","feature":"One-command launch","description":"npm run dev ou .\\\nstart-rubis.ps1 pour lancer tout","priority":"P2","status":"Complété","implementation":"start-rubis.ps1: verify Ollama, launch Ollama bg terminal, npm run dev. ~30 sec.","notes":"Détection auto erreurs, log output lisible"},
   { "domain":"Persévérance & Facilité","feature":"Clear error messages","description":"UI affiche erreurs compréhensibles, logs API détaillés","priority":"P2","status":"Complété","implementation":"UI setErrorMessage(). API log.error(). Try-catch tous endpoints.","notes":"Users voient actionable feedback (ex: 'Modèle Ollama non trouvé, essayez gemma3:4b')"},
-  { "domain":"Persévérance & Facilité","feature":"Roadmap versioning","description":"Fichier Excel roadmap dans repo pour futur maintenance/sprints","priority":"P2","status":"Planifié","implementation":"Créer ROADMAP.xlsx avec specs, priorités, statuts, directives implémentation.","notes":"À committé dans git, mis à jour post-MVP pour v2 features"}
+  { "domain":"Persévérance & Facilité","feature":"Roadmap versioning","description":"Fichier Excel roadmap dans repo pour futur maintenance/sprints","priority":"P2","status":"Planifié","implementation":"Créer ROADMAP.xlsx avec specs, priorités, statuts, directives implémentation.","notes":"À committé dans git, mis à jour post-MVP pour v2 features"},
+  { "domain":"Cœur métier","feature":"Plan d'audit","description":"Document structuré définissant la portée, objectifs, équipe, timeline, ressources, livrables et méthodologie de l'audit. Génération semi-automatique basée sur la campagne et les critères.","priority":"P2","status":"Planifié","implementation":"POST /audit-plan/generate (basé sur campaignId). Service: generateAuditPlan(campaign, criteria) via LLM. Génère: titre, objectifs, portée, équipe (rôles), planning phases, ressources, livrables, contraintes, approbations. Endpoint: GET /audit-plan/:campaignId (récupère ou réaffiche). UI: section 'Plan d'audit' avec form de finalisation, export PDF/DOCX, signature numérique optionnelle. Admin: validation plan avant approval.","notes":"Facilite formalisation audit. LLM génère brouillon à partir critères. User affine et valide. Export PDF pour archivage et transmission."},
+  { "domain":"Cœur métier","feature":"Note de cadrage","description":"Document préliminaire établissant contexte, objectifs, conventions de travail, limitations et responsabilités avant le lancement des entretiens. Synthèse des finalités de l'audit.","priority":"P2","status":"Planifié","implementation":"POST /scope-note/generate (basé sur campaignId, framework). Service: generateScopeNote(campaign, referential, objectives) via LLM. Génère: contexte organisation, objectifs audit, périmètre SI/métiers, limitations, hypothèses, livrables attendus, planning prévisionnel. Stockage db.data.scopeNotes: {id, campaignId, generatedAt, content, userValidated, approvedBy, approvalDate}. UI: section 'Note de cadrage' avec form édition, versioning, commentaires. Export PDF contresigné. Admin: signature électronique et workflow d'approbation.","notes":"Premier document formalisé. Fixe le cadre de l'audit. Généré par IA puis validé par auditeur senior. Versioning permet suivi des modifications. Approuvé par direction avant démarrage entretiens."},
+  { "domain":"Cœur métier","feature":"Convention d'audit","description":"Accord formalisé entre auditeur(s) et audité(s) définissant conditions, accès, confidentialité, responsabilités de chaque partie, planning détaillé, points de contact et escalade.","priority":"P2","status":"Planifié","implementation":"POST /audit-convention/generate (basé sur campaignId, interviewees). Service: generateConvention(campaign, auditors, auditees) via LLM. Génère: parties (auditeur/audité), objectifs rappelés, modalités (durée, jours, horaires), accès SI/locaux, confidentialité/NDA, responsabilités, gestion exceptions, communication, plaintes. Stockage db.data.conventions: {id, campaignId, generatedAt, content, signaturesRequired, signatureStatus}. UI: section 'Convention d'audit' avec affichage, signature électronique, signature collector. Export PDF multi-signatures. Admin: gestion signaturaires, relances signature, archivage final.","notes":"Contrat formel signé par les deux parties. Évite malentendus. IA génère le brouillon standard, user personnalise par contexte. Signatures électroniques (e-sign via DocuSign intégration ultérieurement). À signer avant phase 1.2 (entretiens)."}
 ];
 
 const dependencies = {
@@ -110,7 +113,13 @@ const dependencies = {
   'REQ-048': [],
   'REQ-049': ['REQ-048'],
   'REQ-050': [],
-  'REQ-051': []
+  'REQ-051': [],
+  'REQ-052': [],
+  'REQ-053': [],
+  'REQ-054': [],
+  'REQ-055': ['REQ-001', 'REQ-013'], // Plan d'audit dépend du workflow et des documents
+  'REQ-056': ['REQ-001', 'REQ-013'], // Note de cadrage dépend du workflow et des documents
+  'REQ-057': ['REQ-001', 'REQ-013']  // Convention d'audit dépend du workflow et des documents
 };
 
 const transformedData = specifications.map((item, index) => {
@@ -141,6 +150,11 @@ const roadmapData = transformedData.map((item, index) => ({
 import fs from 'fs';
 fs.writeFileSync('data/roadmap.json', JSON.stringify(roadmapData, null, 2));
 console.log("✅ data/roadmap.json généré pour le viewer web");
+
+// Export as JavaScript module for direct import
+const moduleContent = `export const ROADMAP_DATA = ${JSON.stringify(roadmapData, null, 2)};`;
+fs.writeFileSync('apps/api/src/roadmap-data.ts', moduleContent);
+console.log("✅ apps/api/src/roadmap-data.ts généré");
 
 const worksheet = XLSX.utils.json_to_sheet(transformedData);
 worksheet['!cols'] = [
