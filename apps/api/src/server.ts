@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { z } from "zod";
+import { readFileSync } from "node:fs";
 import { db } from "./db.js";
 import { generateFallbackQuestions } from "./services/questionGenerator.js";
 import { generateQuestionsFromReferential } from "./services/openai.js";
@@ -60,6 +61,53 @@ app.post("/campaigns", async (request, reply) => {
 });
 
 app.get("/campaigns", async () => db.data.campaigns);
+
+// Roadmap endpoint - serve the generated roadmap.json
+let roadmapData: any[] = [];
+try {
+  const roadmapPath = new URL('../../../data/roadmap.json', import.meta.url).pathname;
+  const roadmapJson = readFileSync(roadmapPath, 'utf-8');
+  roadmapData = JSON.parse(roadmapJson);
+} catch (err) {
+  console.warn("⚠️ roadmap.json not found, roadmap endpoint will be empty");
+}
+
+app.get("/roadmap", async () => roadmapData);
+
+app.get("/roadmap/search", async (request) => {
+  const querySchema = z.object({
+    q: z.string().optional(),
+    domain: z.string().optional(),
+    priority: z.enum(['P0', 'P1', 'P2', 'P3']).optional(),
+    status: z.enum(['Complété', 'Planifié']).optional()
+  });
+
+  const query = querySchema.parse(request.query);
+  let filtered: any[] = roadmapData;
+
+  if (query.q) {
+    const searchLower = query.q.toLowerCase();
+    filtered = filtered.filter((item: any) =>
+      item.ID?.toLowerCase().includes(searchLower) ||
+      item['Fonctionnalité']?.toLowerCase().includes(searchLower) ||
+      item['Description']?.toLowerCase().includes(searchLower)
+    );
+  }
+
+  if (query.domain) {
+    filtered = filtered.filter((item: any) => item['Domaine'] === query.domain);
+  }
+
+  if (query.priority) {
+    filtered = filtered.filter((item: any) => item['Priorité'] === query.priority);
+  }
+
+  if (query.status) {
+    filtered = filtered.filter((item: any) => item['Statut'] === query.status);
+  }
+
+  return filtered;
+});
 
 app.post("/criteria", async (request, reply) => {
   const bodySchema = z.object({

@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
+import { RoadmapViewer } from "./RoadmapViewer";
 
 type Language = "fr" | "en";
 
 const API_URL = "http://localhost:4000";
 
 export function App() {
-  const [viewMode, setViewMode] = useState<"workspace" | "dashboard">("workspace");
+  const [viewMode, setViewMode] = useState<"workspace" | "dashboard" | "roadmap">("workspace");
   const [campaignId, setCampaignId] = useState("");
   const [criterionId, setCriterionId] = useState("");
   const [language, setLanguage] = useState<Language>("fr");
@@ -861,6 +862,7 @@ export function App() {
         >
           Mode Dashboard
         </button>
+        <button type="button" onClick={() => setViewMode("roadmap")}>📊 Roadmap</button>
       </div>
       {errorMessage ? <p className="status-error">{errorMessage}</p> : null}
 
@@ -1454,6 +1456,8 @@ export function App() {
       </section>
 
         </>
+      ) : viewMode === "roadmap" ? (
+        <RoadmapViewer />
       ) : null}
 
       <p>{status}</p>

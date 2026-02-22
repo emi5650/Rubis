@@ -132,6 +132,16 @@ const transformedData = specifications.map((item, index) => {
 
 console.log(`📊 ${transformedData.length} spécifications avec IDs et dépendances ✅ ROADMAP.xlsx généré`);
 
+// Export JSON for web viewer
+const roadmapData = transformedData.map((item, index) => ({
+  ...item,
+  order: index + 1
+}));
+
+import fs from 'fs';
+fs.writeFileSync('data/roadmap.json', JSON.stringify(roadmapData, null, 2));
+console.log("✅ data/roadmap.json généré pour le viewer web");
+
 const worksheet = XLSX.utils.json_to_sheet(transformedData);
 worksheet['!cols'] = [
   { wch: 10 },
