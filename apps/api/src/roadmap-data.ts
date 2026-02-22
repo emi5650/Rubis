@@ -651,12 +651,12 @@ export const ROADMAP_DATA = [
     "ID": "REQ-055",
     "Domaine": "Cœur métier",
     "Fonctionnalité": "Plan d'audit",
-    "Description": "Document structuré définissant la portée, objectifs, équipe, timeline, ressources, livrables et méthodologie de l'audit. Génération semi-automatique basée sur la campagne et les critères.",
+    "Description": "Document structuré définissant la portée, objectifs, équipe, timeline, ressources, livrables et méthodologie de l'audit. Interface calendrier pour planifier les phases, générer automatiquement les créneaux d'entretien et les exporter dans Outlook. Génération semi-automatique basée sur la campagne et les critères.",
     "Priorité": "P2",
     "Statut": "Planifié",
     "Prédécesseurs": "REQ-001, REQ-013",
-    "Directives d'implémentation": "POST /audit-plan/generate (basé sur campaignId). Service: generateAuditPlan(campaign, criteria) via LLM. Génère: titre, objectifs, portée, équipe (rôles), planning phases, ressources, livrables, contraintes, approbations. Endpoint: GET /audit-plan/:campaignId (récupère ou réaffiche). UI: section 'Plan d'audit' avec form de finalisation, export PDF/DOCX, signature numérique optionnelle. Admin: validation plan avant approval.",
-    "Notes": "Facilite formalisation audit. LLM génère brouillon à partir critères. User affine et valide. Export PDF pour archivage et transmission.",
+    "Directives d'implémentation": "POST /audit-plan/generate (basé sur campaignId). Service: generateAuditPlan(campaign, criteria) via LLM. Génère: titre, objectifs, portée, équipe (rôles), planning phases, ressources, livrables, contraintes, approbations. Interface calendrier: visualisation Gantt des phases, duration drag-drop, auto-calcul dates début/fin. POST /audit-plan/:id/generate-slots (génère créneaux entretiens basé sur interviewees, durée, ressources dispo). Endpoint: GET /audit-plan/:id/export-outlook (export .ics Outlook). UI: section 'Plan d'audit' avec calendrier interactif, form de finalisation, generation slots button, export PDF/DOCX/Outlook. Admin: validation plan avant approval. Integration Outlook: OAuth2 pour envoi direct calendrier, ou téléchargement .ics pour Outlook local.",
+    "Notes": "Facilite formalisation audit avec visualisation temporelle. Calendrier permet allocation ressources, évite conflicts. Export Outlook synchronise planning avec outils secteur. LLM génère brouillon. User affine, génère slots. Créneaux exportés aux participants.",
     "order": 55
   },
   {
