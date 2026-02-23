@@ -682,5 +682,17 @@
     "Directives d'implémentation": "POST /audit-convention/generate (basé sur campaignId, interviewees). Service: generateConvention(campaign, auditors, auditees) via LLM. Génère: parties (auditeur/audité), objectifs rappelés, modalités (durée, jours, horaires), accès SI/locaux, confidentialité/NDA, responsabilités, gestion exceptions, communication, plaintes. Stockage db.data.conventions: {id, campaignId, generatedAt, content, signaturesRequired, signatureStatus}. UI: section 'Convention d'audit' avec affichage, signature électronique, signature collector. Export PDF multi-signatures. Admin: gestion signaturaires, relances signature, archivage final.",
     "Notes": "Contrat formel signé par les deux parties. Évite malentendus. IA génère le brouillon standard, user personnalise par contexte. Signatures électroniques (e-sign via DocuSign intégration ultérieurement). À signer avant phase 1.2 (entretiens).",
     "order": 57
+  },
+  {
+    "ID": "REQ-058",
+    "Domaine": "UI/UX",
+    "Fonctionnalité": "Navigation multi-campagnes par onglets",
+    "Description": "Système d'onglets permettant d'ouvrir plusieurs campagnes d'audit simultanément dans l'interface. L'utilisateur peut basculer entre différentes instances de campagnes, créer de nouvelles campagnes depuis un onglet dédié, et fermer des onglets. Affichage partie par partie au lieu d'une vue globale unique.",
+    "Priorité": "P1",
+    "Statut": "Planifié",
+    "Prédécesseurs": "REQ-002, REQ-038",
+    "Directives d'implémentation": "UI: Composant TabSystem avec state managé [openTabs: {id, campaignId, title, isActive}]. Barre d'onglets horizontal en haut de l'app avec (+) pour nouvelle campagne. Chaque onglet affiche nom campagne + bouton fermeture (×). Click sur onglet active la campagne correspondante. État activeCampaignId contrôle quelle campagne est chargée. localStorage persistance des onglets ouverts entre sessions. GET /campaigns récupère liste complète pour modal sélection. Workflow: User click '+' → Modal liste campagnes existantes + bouton 'Créer nouvelle' → Sélection ouvre nouvel onglet. Component isolation: chaque onglet charge son propre contexte (documents, critères, interviewés, etc.). Max 5 onglets ouverts simultanément pour perf. Fermer onglet = cleanup state + localStorage update. Navigation keyboard: Ctrl+Tab pour basculer entre onglets.",
+    "Notes": "Améliore UX multi-audit. Permet comparaison side-by-side (futur: split view). Persistance localStorage évite perte état après refresh. Limite 5 onglets empêche surcharge mémoire. Chaque campagne isolée = évite cross-contamination données. icône badge sur onglet si actions pending (ex: docs à transmettre).",
+    "order": 58
   }
 ]
