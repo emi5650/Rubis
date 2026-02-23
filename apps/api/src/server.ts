@@ -11,6 +11,7 @@ import { ROADMAP_DATA } from "./roadmap-data.js";
 import { generateFallbackQuestions } from "./services/questionGenerator.js";
 import { generateQuestionsFromReferential } from "./services/openai.js";
 import { parseReferentialFile } from "./services/referentialParser.js";
+import { createOutlookClient, createOutlookEvent, updateOutlookEvent, deleteOutlookEvent, buildEventPayload } from "./services/outlookSync.js";
 
 const app = Fastify({ logger: true });
 
@@ -35,6 +36,163 @@ async function logAction(campaignId: string, action: string, details: string) {
   }
 
   await db.write();
+}
+
+function formatLocalIso(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function toIcsDate(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function buildIcsCalendar(slots: Array<{ id: string; title: string; startAt: string; endAt: string; room: string; teamsLink: string; theme: string; criterionCode: string; mode: string }>) {
+  const nowStamp = toIcsDate(new Date().toISOString());
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Rubis//Audit Planner//FR",
+    "CALSCALE:GREGORIAN"
+  ];
+
+  slots.forEach((slot) => {
+    const startAt = toIcsDate(slot.startAt);
+    const endAt = toIcsDate(slot.endAt);
+    if (!startAt || !endAt) {
+      return;
+    }
+
+    const descriptionParts = [
+      slot.theme ? `Theme: ${slot.theme}` : "",
+      slot.criterionCode ? `Critere: ${slot.criterionCode}` : "",
+      slot.mode ? `Mode: ${slot.mode}` : "",
+      slot.teamsLink ? `Teams: ${slot.teamsLink}` : ""
+    ].filter((value) => value.length > 0);
+
+    lines.push("BEGIN:VEVENT");
+    lines.push(`UID:${slot.id}@rubis`);
+    lines.push(`DTSTAMP:${nowStamp}`);
+    lines.push(`DTSTART:${startAt}`);
+    lines.push(`DTEND:${endAt}`);
+    lines.push(`SUMMARY:${slot.title || "Entretien"}`);
+    if (descriptionParts.length > 0) {
+      lines.push(`DESCRIPTION:${descriptionParts.join(" ")}`);
+    }
+    if (slot.room) {
+      lines.push(`LOCATION:${slot.room}`);
+    }
+    lines.push("END:VEVENT");
+  });
+
+  lines.push("END:VCALENDAR");
+  return `${lines.join("\r\n")}\r\n`;
+}
+
+function generateInterviewSlots(options: {
+  campaignId: string;
+  startDate: string;
+  endDate: string;
+  dayStartTime: string;
+  dayEndTime: string;
+  slotDurationMinutes: number;
+  breakMinutes: number;
+  mode: "sur-site" | "distance" | "hybride";
+  room: string;
+  teamsLink: string;
+  theme: string;
+  criterionCode: string;
+  participantIds: string[];
+  associatedDocumentIds: string[];
+  titlePrefix: string;
+}) {
+  const {
+    campaignId,
+    startDate,
+    endDate,
+    dayStartTime,
+    dayEndTime,
+    slotDurationMinutes,
+    breakMinutes,
+    mode,
+    room,
+    teamsLink,
+    theme,
+    criterionCode,
+    participantIds,
+    associatedDocumentIds,
+    titlePrefix
+  } = options;
+
+  const createdSlots = [] as Array<{
+    id: string;
+    campaignId: string;
+    title: string;
+    startAt: string;
+    endAt: string;
+    mode: "sur-site" | "distance" | "hybride";
+    room: string;
+    teamsLink: string;
+    theme: string;
+    criterionCode: string;
+    participantIds: string[];
+    associatedDocumentIds: string[];
+    outlookSyncEnabled: boolean;
+    outlookEventId: string;
+  }>;
+
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return createdSlots;
+  }
+
+  const dayStartParts = dayStartTime.split(":").map((value) => Number(value));
+  const dayEndParts = dayEndTime.split(":").map((value) => Number(value));
+
+  let slotIndex = 1;
+  for (let day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
+    const dayStart = new Date(day);
+    dayStart.setHours(dayStartParts[0] || 9, dayStartParts[1] || 0, 0, 0);
+
+    const dayEnd = new Date(day);
+    dayEnd.setHours(dayEndParts[0] || 17, dayEndParts[1] || 0, 0, 0);
+
+    let cursor = new Date(dayStart);
+    while (cursor.getTime() + slotDurationMinutes * 60000 <= dayEnd.getTime()) {
+      const slotStart = new Date(cursor);
+      const slotEnd = new Date(cursor.getTime() + slotDurationMinutes * 60000);
+
+      const slot = {
+        id: randomUUID(),
+        campaignId,
+        title: `${titlePrefix} ${slotIndex}`.trim(),
+        startAt: formatLocalIso(slotStart),
+        endAt: formatLocalIso(slotEnd),
+        mode,
+        room,
+        teamsLink,
+        theme,
+        criterionCode,
+        participantIds,
+        associatedDocumentIds,
+        outlookSyncEnabled: false,
+        outlookEventId: ""
+      };
+
+      createdSlots.push(slot);
+      slotIndex += 1;
+
+      cursor = new Date(slotEnd.getTime() + breakMinutes * 60000);
+    }
+  }
+
+  return createdSlots;
 }
 
 app.get("/health", async () => ({ status: "ok" }));
@@ -438,6 +596,155 @@ app.get("/audit-plans/:campaignId", async (request) => {
   return db.data.auditPlans.find((item) => item.campaignId === campaignId) ?? null;
 });
 
+app.post("/audit-plans/:campaignId/generate-slots", async (request, reply) => {
+  const paramsSchema = z.object({ campaignId: z.string().uuid() });
+  const { campaignId } = paramsSchema.parse(request.params);
+
+  const bodySchema = z.object({
+    startDate: z.string().min(8),
+    endDate: z.string().min(8),
+    dayStartTime: z.string().min(3),
+    dayEndTime: z.string().min(3),
+    slotDurationMinutes: z.number().min(15).max(480),
+    breakMinutes: z.number().min(0).max(120).default(10),
+    mode: z.enum(["sur-site", "distance", "hybride"]).default("hybride"),
+    room: z.string().default(""),
+    teamsLink: z.string().default(""),
+    theme: z.string().min(2).default("Entretien"),
+    criterionCode: z.string().default(""),
+    participantIds: z.array(z.string().uuid()).default([]),
+    associatedDocumentIds: z.array(z.string().uuid()).default([]),
+    titlePrefix: z.string().default("Entretien")
+  });
+
+  const body = bodySchema.parse(request.body);
+  const createdSlots = generateInterviewSlots({
+    campaignId,
+    startDate: body.startDate,
+    endDate: body.endDate,
+    dayStartTime: body.dayStartTime,
+    dayEndTime: body.dayEndTime,
+    slotDurationMinutes: body.slotDurationMinutes,
+    breakMinutes: body.breakMinutes ?? 10,
+    mode: body.mode,
+    room: body.room,
+    teamsLink: body.teamsLink,
+    theme: body.theme,
+    criterionCode: body.criterionCode,
+    participantIds: body.participantIds,
+    associatedDocumentIds: body.associatedDocumentIds,
+    titlePrefix: body.titlePrefix
+  });
+
+  if (createdSlots.length === 0) {
+    return reply.code(400).send({ message: "No slots generated. Check date range and times." });
+  }
+
+  db.data.interviewSlots.push(...createdSlots);
+  await db.write();
+  await logAction(campaignId, "audit-plan.slots-generated", `${createdSlots.length} slots`);
+
+  return reply.code(201).send({ count: createdSlots.length, slots: createdSlots });
+});
+
+app.get("/audit-plans/:campaignId/export-outlook", async (request, reply) => {
+  const paramsSchema = z.object({ campaignId: z.string().uuid() });
+  const { campaignId } = paramsSchema.parse(request.params);
+
+  const slots = db.data.interviewSlots.filter((item) => item.campaignId === campaignId);
+  if (slots.length === 0) {
+    return reply.code(404).send({ message: "No interview slots found" });
+  }
+
+  const ics = buildIcsCalendar(slots);
+  reply.header("Content-Type", "text/calendar; charset=utf-8");
+  reply.header("Content-Disposition", "attachment; filename=plan-audit.ics");
+  return reply.send(ics);
+});
+
+app.post("/outlook/sync-slot/:slotId", async (request, reply) => {
+  const paramsSchema = z.object({ slotId: z.string().uuid() });
+  const { slotId } = paramsSchema.parse(request.params);
+
+  const bodySchema = z.object({
+    accessToken: z.string().min(10)
+  });
+  const body = bodySchema.parse(request.body);
+
+  const slot = db.data.interviewSlots.find((item) => item.id === slotId);
+  if (!slot) {
+    return reply.code(404).send({ message: "Interview slot not found" });
+  }
+
+  try {
+    const client = createOutlookClient({ accessToken: body.accessToken });
+    const payload = buildEventPayload(slot);
+
+    if (slot.outlookEventId) {
+      const updateResult = await updateOutlookEvent(client, slot.outlookEventId, payload);
+      if (!updateResult.success) {
+        return reply.code(500).send({ message: `Outlook update failed: ${updateResult.error}` });
+      }
+
+      await logAction(slot.campaignId, "outlook.event-updated", slot.title);
+      return reply.send({ success: true, eventId: slot.outlookEventId, action: "updated" });
+    } else {
+      const createResult = await createOutlookEvent(client, payload);
+      if (!createResult.success) {
+        return reply.code(500).send({ message: `Outlook create failed: ${createResult.error}` });
+      }
+
+      slot.outlookEventId = createResult.eventId || "";
+      slot.outlookSyncEnabled = true;
+      await db.write();
+      await logAction(slot.campaignId, "outlook.event-created", slot.title);
+
+      return reply.send({ success: true, eventId: createResult.eventId, webLink: createResult.webLink, action: "created" });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return reply.code(500).send({ message: `Outlook sync failed: ${message}` });
+  }
+});
+
+app.delete("/outlook/sync-slot/:slotId", async (request, reply) => {
+  const paramsSchema = z.object({ slotId: z.string().uuid() });
+  const { slotId } = paramsSchema.parse(request.params);
+
+  const bodySchema = z.object({
+    accessToken: z.string().min(10)
+  });
+  const body = bodySchema.parse(request.body);
+
+  const slot = db.data.interviewSlots.find((item) => item.id === slotId);
+  if (!slot) {
+    return reply.code(404).send({ message: "Interview slot not found" });
+  }
+
+  if (!slot.outlookEventId) {
+    return reply.code(400).send({ message: "No Outlook event linked to this slot" });
+  }
+
+  try {
+    const client = createOutlookClient({ accessToken: body.accessToken });
+    const deleteResult = await deleteOutlookEvent(client, slot.outlookEventId);
+
+    if (!deleteResult.success) {
+      return reply.code(500).send({ message: `Outlook delete failed: ${deleteResult.error}` });
+    }
+
+    slot.outlookEventId = "";
+    slot.outlookSyncEnabled = false;
+    await db.write();
+    await logAction(slot.campaignId, "outlook.event-deleted", slot.title);
+
+    return reply.send({ success: true, action: "deleted" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return reply.code(500).send({ message: `Outlook delete failed: ${message}` });
+  }
+});
+
 app.post("/interview-slots", async (request, reply) => {
   const bodySchema = z.object({
     campaignId: z.string().uuid(),
@@ -472,6 +779,32 @@ app.get("/interview-slots/:campaignId", async (request) => {
   const { campaignId } = paramsSchema.parse(request.params);
 
   return db.data.interviewSlots.filter((item) => item.campaignId === campaignId);
+});
+
+app.patch("/interview-slots/:slotId", async (request, reply) => {
+  const paramsSchema = z.object({ slotId: z.string().uuid() });
+  const { slotId } = paramsSchema.parse(request.params);
+
+  const bodySchema = z.object({
+    startAt: z.string().optional(),
+    endAt: z.string().optional()
+  });
+  const body = bodySchema.parse(request.body);
+
+  const slot = db.data.interviewSlots.find((item) => item.id === slotId);
+  if (!slot) {
+    return reply.code(404).send({ message: "Interview slot not found" });
+  }
+
+  if (body.startAt) {
+    slot.startAt = body.startAt;
+  }
+  if (body.endAt) {
+    slot.endAt = body.endAt;
+  }
+
+  await db.write();
+  return reply.send(slot);
 });
 
 app.get("/interview-slots/suggestions/:campaignId/:theme", async (request) => {

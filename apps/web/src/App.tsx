@@ -1,7 +1,22 @@
 import { FormEvent, useEffect, useState } from "react";
 import { RoadmapViewer } from "./RoadmapViewer";
+import { GanttCalendar } from "./GanttCalendar";
 
 type Language = "fr" | "en";
+
+type InterviewSlot = {
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  mode: string;
+  room: string;
+  teamsLink: string;
+  theme: string;
+  criterionCode: string;
+  outlookSyncEnabled?: boolean;
+  outlookEventId?: string;
+};
 
 const API_URL = "http://localhost:4000";
 
@@ -15,6 +30,7 @@ export function App() {
   const [generated, setGenerated] = useState<string[]>([]);
   const [documents, setDocuments] = useState<Array<{ id: string; name: string; theme: string; sensitivity: string }>>([]);
   const [interviewees, setInterviewees] = useState<Array<{ id: string; fullName: string; role: string }>>([]);
+  const [interviewSlots, setInterviewSlots] = useState<InterviewSlot[]>([]);
   const [themeSuggestion, setThemeSuggestion] = useState("");
   const [suggestedDocuments, setSuggestedDocuments] = useState<Array<{ id: string; name: string }>>([]);
   const [suggestedCriteria, setSuggestedCriteria] = useState<Array<{ id: string; code: string; title: string }>>([]);
@@ -53,6 +69,8 @@ export function App() {
   >([]);
   const [referentialFile, setReferentialFile] = useState<File | null>(null);
   const [uploadingReferential, setUploadingReferential] = useState(false);
+  const [outlookAccessToken, setOutlookAccessToken] = useState("");
+  const [ganttViewEnabled, setGanttViewEnabled] = useState(false);
 
   function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -437,6 +455,172 @@ export function App() {
     });
 
     setStatus("Créneau d'entretien enregistré");
+  }
+
+  async function loadInterviewSlots() {
+    if (!campaignId) {
+      setErrorMessage("Sélectionne une campagne avant de charger les créneaux");
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      const data = await requestJson<InterviewSlot[]>(`${API_URL}/interview-slots/${campaignId}`);
+      setInterviewSlots(data || []);
+      setStatus("Créneaux chargés");
+    } catch (error) {
+      setErrorMessage(`Chargement créneaux impossible: ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function generateInterviewSlots(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+
+    const payload = {
+      startDate: String(formData.get("startDate") || ""),
+      endDate: String(formData.get("endDate") || ""),
+      dayStartTime: String(formData.get("dayStartTime") || "09:00"),
+      dayEndTime: String(formData.get("dayEndTime") || "17:00"),
+      slotDurationMinutes: Number(formData.get("slotDurationMinutes") || 60),
+      breakMinutes: Number(formData.get("breakMinutes") || 10),
+      mode: String(formData.get("mode") || "hybride"),
+      room: String(formData.get("room") || ""),
+      teamsLink: String(formData.get("teamsLink") || ""),
+      theme: String(formData.get("theme") || "Entretien"),
+      criterionCode: String(formData.get("criterionCode") || ""),
+      titlePrefix: String(formData.get("titlePrefix") || "Entretien")
+    };
+
+    try {
+      setErrorMessage("");
+      const data = await requestJson<{ count: number; slots: InterviewSlot[] }>(
+        `${API_URL}/audit-plans/${campaignId}/generate-slots`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      setInterviewSlots((previous) => [...data.slots, ...previous]);
+      setStatus(`Créneaux générés: ${data.count}`);
+    } catch (error) {
+      setErrorMessage(`Génération des créneaux impossible: ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function exportOutlookCalendar() {
+    if (!campaignId) {
+      setErrorMessage("Sélectionne une campagne avant l'export");
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      const response = await fetch(`${API_URL}/audit-plans/${campaignId}/export-outlook`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `plan-audit-${campaignId}.ics`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(objectUrl);
+      setStatus("Export Outlook (.ics) généré");
+    } catch (error) {
+      setErrorMessage(`Export Outlook impossible: ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function syncSlotToOutlook(slotId: string) {
+    if (!outlookAccessToken.trim()) {
+      setErrorMessage("Token Outlook requis pour la synchronisation");
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      const data = await requestJson<{ success: boolean; eventId: string; webLink?: string; action: string }>(
+        `${API_URL}/outlook/sync-slot/${slotId}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: outlookAccessToken })
+        }
+      );
+
+      if (data.success) {
+        setInterviewSlots((previous) =>
+          previous.map((slot) =>
+            slot.id === slotId
+              ? { ...slot, outlookSyncEnabled: true, outlookEventId: data.eventId }
+              : slot
+          )
+        );
+        setStatus(`Créneau ${data.action === "created" ? "créé" : "mis à jour"} dans Outlook`);
+      }
+    } catch (error) {
+      setErrorMessage(`Synchro Outlook impossible: ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function unsyncSlotFromOutlook(slotId: string) {
+    if (!outlookAccessToken.trim()) {
+      setErrorMessage("Token Outlook requis");
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      const data = await requestJson<{ success: boolean; action: string }>(
+        `${API_URL}/outlook/sync-slot/${slotId}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: outlookAccessToken })
+        }
+      );
+
+      if (data.success) {
+        setInterviewSlots((previous) =>
+          previous.map((slot) =>
+            slot.id === slotId
+              ? { ...slot, outlookSyncEnabled: false, outlookEventId: "" }
+              : slot
+          )
+        );
+        setStatus("Créneau supprimé d'Outlook");
+      }
+    } catch (error) {
+      setErrorMessage(`Suppression Outlook impossible: ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function updateSlotTimes(slotId: string, newStart: string, newEnd: string) {
+    const slot = interviewSlots.find((s) => s.id === slotId);
+    if (!slot) return;
+
+    setInterviewSlots((previous) =>
+      previous.map((s) =>
+        s.id === slotId ? { ...s, startAt: newStart, endAt: newEnd } : s
+      )
+    );
+
+    try {
+      await requestJson(`${API_URL}/interview-slots/${slotId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: newStart, endAt: newEnd })
+      });
+    } catch (error) {
+      console.error("Update slot failed:", error);
+    }
   }
 
   async function loadThemeSuggestions(event: FormEvent<HTMLFormElement>) {
@@ -847,6 +1031,30 @@ export function App() {
     }
   }
 
+  function formatSlotTime(value: string) {
+    const parsed = new Date(value);
+    if (!Number.isFinite(parsed.getTime())) {
+      return value;
+    }
+
+    return parsed.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  const sortedSlots = [...interviewSlots].sort((a, b) => {
+    const left = new Date(a.startAt).getTime();
+    const right = new Date(b.startAt).getTime();
+    return left - right;
+  });
+
+  const slotsByDay = sortedSlots.reduce<Record<string, typeof interviewSlots>>((acc, slot) => {
+    const dayKey = slot.startAt.slice(0, 10);
+    if (!acc[dayKey]) {
+      acc[dayKey] = [];
+    }
+    acc[dayKey].push(slot);
+    return acc;
+  }, {});
+
   return (
     <main className="page">
       <h1>Rubis - MVP Audit</h1>
@@ -1202,6 +1410,121 @@ export function App() {
             Enregistrer
           </button>
         </form>
+      </section>
+
+      <section className="card">
+        <h2>Calendrier d'audit</h2>
+        <div style={{ marginBottom: "12px" }}>
+          <label>Token Outlook (OAuth2): </label>
+          <input
+            type="password"
+            value={outlookAccessToken}
+            onChange={(e) => setOutlookAccessToken(e.target.value)}
+            placeholder="Coller ton access token ici"
+            style={{ width: "100%", marginTop: "4px" }}
+          />
+          <small style={{ color: "#64748b" }}>
+            Obtiens-le via{" "}
+            <a href="https://developer.microsoft.com/en-us/graph/graph-explorer" target="_blank" rel="noopener noreferrer">
+              Graph Explorer
+            </a>{" "}
+            avec les scopes <code>Calendars.ReadWrite</code>
+          </small>
+        </div>
+        <form onSubmit={generateInterviewSlots}>
+          <input type="date" name="startDate" required />
+          <input type="date" name="endDate" required />
+          <input type="time" name="dayStartTime" defaultValue="09:00" required />
+          <input type="time" name="dayEndTime" defaultValue="17:00" required />
+          <input type="number" name="slotDurationMinutes" placeholder="Durée créneau (min)" defaultValue={60} min={15} />
+          <input type="number" name="breakMinutes" placeholder="Pause (min)" defaultValue={10} min={0} />
+          <select name="mode" defaultValue="hybride">
+            <option value="sur-site">Sur site</option>
+            <option value="distance">Distance</option>
+            <option value="hybride">Hybride</option>
+          </select>
+          <input name="room" placeholder="Salle" />
+          <input name="teamsLink" placeholder="Lien Teams" />
+          <input name="theme" placeholder="Thème" defaultValue="Entretien" />
+          <input name="criterionCode" placeholder="Code critère (optionnel)" />
+          <input name="titlePrefix" placeholder="Préfixe titre" defaultValue="Entretien" />
+          <button type="submit" disabled={!campaignId}>
+            Générer créneaux
+          </button>
+          <button type="button" onClick={loadInterviewSlots} disabled={!campaignId}>
+            Charger créneaux
+          </button>
+          <button type="button" onClick={exportOutlookCalendar} disabled={!campaignId}>
+            Export Outlook (.ics)
+          </button>
+          <button
+            type="button"
+            onClick={() => setGanttViewEnabled(!ganttViewEnabled)}
+            style={{ backgroundColor: ganttViewEnabled ? "#22c55e" : "#64748b" }}
+          >
+            {ganttViewEnabled ? "Vue Liste" : "Vue Gantt"}
+          </button>
+        </form>
+        {sortedSlots.length === 0 ? (
+          <p>Aucun créneau chargé.</p>
+        ) : ganttViewEnabled ? (
+          <GanttCalendar slots={sortedSlots} onSlotUpdate={updateSlotTimes} />
+        ) : (
+          <div className="calendar-grid">
+            {Object.entries(slotsByDay).map(([day, slots]) => {
+              const dayLabel = new Date(`${day}T00:00:00`);
+              const label = Number.isNaN(dayLabel.getTime())
+                ? day
+                : dayLabel.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
+
+              return (
+                <div key={day} className="calendar-day">
+                  <strong>{label}</strong>
+                  {slots.map((slot) => (
+                    <div key={slot.id} className="calendar-slot">
+                      <div>
+                        <strong>{slot.title}</strong>
+                        <div className="calendar-meta">
+                          {formatSlotTime(slot.startAt)} - {formatSlotTime(slot.endAt)} | {slot.mode}
+                        </div>
+                        <div className="calendar-meta">
+                          {slot.theme}{slot.criterionCode ? ` | ${slot.criterionCode}` : ""}
+                        </div>
+                        {slot.outlookSyncEnabled && (
+                          <div className="calendar-meta" style={{ color: "#22c55e" }}>
+                            ✓ Synchronisé Outlook
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: "4px", flexDirection: "column", alignItems: "flex-end" }}>
+                        <div className="calendar-meta">{slot.room || ""}</div>
+                        {!slot.outlookSyncEnabled ? (
+                          <button
+                            type="button"
+                            onClick={() => syncSlotToOutlook(slot.id)}
+                            disabled={!outlookAccessToken.trim()}
+                            style={{ fontSize: "11px", padding: "4px 8px" }}
+                          >
+                            Sync Outlook
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => unsyncSlotFromOutlook(slot.id)}
+                            disabled={!outlookAccessToken.trim()}
+                            style={{ fontSize: "11px", padding: "4px 8px", backgroundColor: "#ef4444" }}
+                          >
+                            Unsync
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="card">

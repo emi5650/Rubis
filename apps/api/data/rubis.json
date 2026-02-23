@@ -1,6 +1,13 @@
 {
   "campaigns": [
     {
+      "id": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "name": "Test",
+      "language": "fr",
+      "framework": "HDS",
+      "createdAt": "2026-02-23T08:09:48.348Z"
+    },
+    {
       "id": "a183fbbf-bd60-49eb-98fb-9a14ddfe34db",
       "name": "Test",
       "language": "fr",
@@ -133,6 +140,118 @@
       ],
       "outlookSyncEnabled": false,
       "outlookEventId": ""
+    },
+    {
+      "id": "6a4a2fa4-32b1-4b1a-9f3d-c8d9b67299e4",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "title": "Entretien 1",
+      "startAt": "2026-02-23T09:00",
+      "endAt": "2026-02-23T10:00",
+      "mode": "sur-site",
+      "room": "",
+      "teamsLink": "",
+      "theme": "Entretien",
+      "criterionCode": "",
+      "participantIds": [],
+      "associatedDocumentIds": [],
+      "outlookSyncEnabled": false,
+      "outlookEventId": ""
+    },
+    {
+      "id": "b88eb012-5e2f-43d0-856d-b2cde76f1277",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "title": "Entretien 2",
+      "startAt": "2026-02-23T10:10",
+      "endAt": "2026-02-23T11:10",
+      "mode": "sur-site",
+      "room": "",
+      "teamsLink": "",
+      "theme": "Entretien",
+      "criterionCode": "",
+      "participantIds": [],
+      "associatedDocumentIds": [],
+      "outlookSyncEnabled": false,
+      "outlookEventId": ""
+    },
+    {
+      "id": "ef8087d3-207c-4afd-9cfd-fbe60880e699",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "title": "Entretien 3",
+      "startAt": "2026-02-23T11:20",
+      "endAt": "2026-02-23T12:20",
+      "mode": "sur-site",
+      "room": "",
+      "teamsLink": "",
+      "theme": "Entretien",
+      "criterionCode": "",
+      "participantIds": [],
+      "associatedDocumentIds": [],
+      "outlookSyncEnabled": false,
+      "outlookEventId": ""
+    },
+    {
+      "id": "c824cadb-d3c0-4e25-ac2e-3690acdf56c1",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "title": "Entretien 4",
+      "startAt": "2026-02-23T12:30",
+      "endAt": "2026-02-23T13:30",
+      "mode": "sur-site",
+      "room": "",
+      "teamsLink": "",
+      "theme": "Entretien",
+      "criterionCode": "",
+      "participantIds": [],
+      "associatedDocumentIds": [],
+      "outlookSyncEnabled": false,
+      "outlookEventId": ""
+    },
+    {
+      "id": "70cd1923-b667-491f-96cc-b101f4dfe121",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "title": "Entretien 5",
+      "startAt": "2026-02-23T13:40",
+      "endAt": "2026-02-23T14:40",
+      "mode": "sur-site",
+      "room": "",
+      "teamsLink": "",
+      "theme": "Entretien",
+      "criterionCode": "",
+      "participantIds": [],
+      "associatedDocumentIds": [],
+      "outlookSyncEnabled": false,
+      "outlookEventId": ""
+    },
+    {
+      "id": "a416ac72-624f-43d7-8963-26f10c189457",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "title": "Entretien 6",
+      "startAt": "2026-02-23T14:50",
+      "endAt": "2026-02-23T15:50",
+      "mode": "sur-site",
+      "room": "",
+      "teamsLink": "",
+      "theme": "Entretien",
+      "criterionCode": "",
+      "participantIds": [],
+      "associatedDocumentIds": [],
+      "outlookSyncEnabled": false,
+      "outlookEventId": ""
+    },
+    {
+      "id": "78a1a13b-7b2b-471e-8250-eff766c98869",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "title": "Entretien 7",
+      "startAt": "2026-02-23T16:00",
+      "endAt": "2026-02-23T17:00",
+      "mode": "sur-site",
+      "room": "",
+      "teamsLink": "",
+      "theme": "Entretien",
+      "criterionCode": "",
+      "participantIds": [],
+      "associatedDocumentIds": [],
+      "outlookSyncEnabled": false,
+      "outlookEventId": ""
     }
   ],
   "interviewNotes": [
@@ -190,6 +309,20 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "d815ac86-b9ca-4660-909e-58ea65959669",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "action": "audit-plan.slots-generated",
+      "timestamp": "2026-02-23T08:10:31.153Z",
+      "details": "7 slots"
+    },
+    {
+      "id": "83a6e71b-4a18-4e60-bca0-21531d239f85",
+      "campaignId": "d3950b97-76bb-418d-afd1-9086d40a6899",
+      "action": "campaign.created",
+      "timestamp": "2026-02-23T08:09:48.350Z",
+      "details": "Test"
+    },
     {
       "id": "1e24ea8d-ddde-493c-8df0-718ab4e7cbb9",
       "campaignId": "a183fbbf-bd60-49eb-98fb-9a14ddfe34db",
