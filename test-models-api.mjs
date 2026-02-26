@@ -1,26 +1,129 @@
 // Test both Mistral and Gemma3 via Ollama API directly
 // This simulates real Rubis usage through the openai.ts service
 
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+const DEFAULT_MODELS = ["mistral", "qwen2.5:7b-instruct", "gemma3:4b"];
+const QUICK_MODELS = ["mistral", "qwen2.5:7b-instruct"];
+const cliArgs = process.argv.slice(2);
+const isQuickMode = cliArgs.includes("--quick") || process.env.QUICK_BENCH === "1";
+const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || (isQuickMode ? 15000 : 45000));
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, options, retries = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) {
+        await sleep(500 * attempt);
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("fetch failed");
+}
+
+async function waitForOllamaReady() {
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    try {
+      const response = await fetchWithRetry(`${OLLAMA_URL}/api/tags`, { method: "GET" }, 1);
+      if (response.ok) {
+        return true;
+      }
+    } catch {
+      // ignore and retry
+    }
+    await sleep(500);
+  }
+
+  return false;
+}
+
+function getModelsToTest() {
+  if (isQuickMode) {
+    return QUICK_MODELS;
+  }
+
+  const cliModels = cliArgs.filter((value) => Boolean(value) && !value.startsWith("--"));
+  if (cliModels.length > 0) {
+    return cliModels;
+  }
+
+  const envModels = (process.env.MODELS || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return envModels.length > 0 ? envModels : DEFAULT_MODELS;
+}
+
+function escapeCsv(value) {
+  const stringValue = String(value ?? "");
+  if (stringValue.includes(",") || stringValue.includes("\n") || stringValue.includes('"')) {
+    return `"${stringValue.replaceAll('"', '""')}"`;
+  }
+  return stringValue;
+}
+
+async function saveCsv(results) {
+  const outputDir = path.resolve("model-tests");
+  await mkdir(outputDir, { recursive: true });
+
+  const headers = ["model", "elapsedSeconds", "isValidJson", "itemCount", "score", "error"];
+  const lines = [headers.join(",")];
+
+  for (const row of results) {
+    lines.push(
+      [
+        escapeCsv(row.model),
+        escapeCsv(row.elapsed.toFixed(1)),
+        escapeCsv(row.isValid),
+        escapeCsv(row.itemCount),
+        escapeCsv(row.score.toFixed(0)),
+        escapeCsv(row.error || "")
+      ].join(",")
+    );
+  }
+
+  const filePath = path.join(outputDir, "model-results-wsl.csv");
+  await writeFile(filePath, `${lines.join("\n")}\n`, "utf8");
+  return filePath;
+}
 
 async function testModel(modelName) {
   const startTime = Date.now();
   
-  const prompt = `Tu es un assistant d'audit. Génère 5 questions d'audit en français à partir de ce critère:
+  const prompt = `Tu es un assistant d'audit. Génère ${isQuickMode ? 3 : 5} questions d'audit en français à partir de ce critère:
 "Contrôle d'accès et gestion des identités".
 Retourne UNIQUEMENT un tableau JSON d'objets avec les clés : text, guidance, theme.
 Pas de markdown, juste le JSON brut.`;
 
   try {
-    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const response = await fetchWithRetry(`${OLLAMA_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         model: modelName,
         prompt: prompt,
-        stream: false
+        stream: false,
+        options: {
+          num_predict: isQuickMode ? 180 : 320,
+          temperature: 0.2
+        }
       })
-    });
+    }, 3);
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${await response.text()}`);
@@ -90,8 +193,16 @@ Pas de markdown, juste le JSON brut.`;
 async function main() {
   console.log("Testing Ollama models via API (real-world Rubis conditions)\n");
   console.log("Ollama URL:", OLLAMA_URL);
-  
-  const models = ["mistral", "gemma3:4b"];
+  console.log("Quick mode:", isQuickMode);
+  console.log("Timeout/model:", `${REQUEST_TIMEOUT_MS}ms`);
+  const models = getModelsToTest();
+  console.log("Models:", models.join(", "));
+
+  const ready = await waitForOllamaReady();
+  if (!ready) {
+    throw new Error(`Ollama is not reachable at ${OLLAMA_URL}`);
+  }
+
   const results = [];
 
   for (const model of models) {
@@ -113,6 +224,9 @@ async function main() {
   } else {
     console.log("\nNo valid results.");
   }
+
+  const csvPath = await saveCsv(results);
+  console.log(`CSV: ${csvPath}`);
 }
 
 main().catch(console.error);

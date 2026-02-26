@@ -6,6 +6,7 @@ import { JSONFilePreset } from "lowdb/node";
 interface Campaign {
   id: string;
   name: string;
+  projectCode: string;
   language: "fr" | "en";
   framework: string;
   createdAt: string;
@@ -38,6 +39,14 @@ interface DocumentRecord {
   date: string;
   sensitivity: string;
   summary: string;
+  internalId?: string;
+  authors?: string;
+  history?: string;
+  pageCount?: number | null;
+  sourceFilename?: string;
+  sourceMimeType?: string;
+  sourceSize?: number;
+  sourceStoragePath?: string;
 }
 
 interface MetricScale {
@@ -186,6 +195,71 @@ interface AuditLogRecord {
   details: string;
 }
 
+interface OpenAiKeyRecord {
+  encrypted: string;
+  iv: string;
+  tag: string;
+  updatedAt: string;
+}
+
+interface AdminConfigRecord {
+  openAiKey?: OpenAiKeyRecord;
+  auditDirectory?: AuditDirectoryEntry[];
+}
+
+interface AuditDirectoryEntry {
+  id: string;
+  fullName: string;
+  profile: "auditeur" | "expert";
+  email: string;
+}
+
+interface AuditTeamRecord {
+  id: string;
+  campaignId: string;
+  memberIds: string[];
+}
+
+interface ReferentialDocumentRecord {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+  uploadedAt: string;
+  extractedName: string;
+  extractedVersion: string;
+  extractedDate: string;
+}
+
+interface ReferentialRecord {
+  id: string;
+  name: string;
+  version: string;
+  documentName: string;
+  documentVersion: string;
+  documentDate: string;
+  importedAt: string;
+  sourceDocumentId: string;
+}
+
+interface ReferentialRequirementRecord {
+  id: string;
+  referentialId: string;
+  requirementId: string;
+  requirementTitle: string;
+  themeLevel1: string;
+  themeLevel1Title: string;
+  themeLevel2: string;
+  themeLevel2Title: string;
+  themeLevel3: string;
+  themeLevel3Title: string;
+  themeLevel4: string;
+  themeLevel4Title: string;
+  requirementText: string;
+  scopes: string[];
+}
+
 export interface RubisDb {
   campaigns: Campaign[];
   criteria: Criterion[];
@@ -205,6 +279,11 @@ export interface RubisDb {
   interviewAnswers: InterviewAnswerRecord[];
   auditReports: AuditReportRecord[];
   auditLogs: AuditLogRecord[];
+  referentialDocuments: ReferentialDocumentRecord[];
+  referentials: ReferentialRecord[];
+  referentialRequirements: ReferentialRequirementRecord[];
+  auditTeams: AuditTeamRecord[];
+  adminConfig: AdminConfigRecord;
 }
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -229,12 +308,28 @@ export const db = await JSONFilePreset<RubisDb>(dbPath, {
   interviewDocumentReferences: [],
   interviewAnswers: [],
   auditReports: [],
-  auditLogs: []
+  auditLogs: [],
+  referentialDocuments: [],
+  referentials: [],
+  referentialRequirements: [],
+  auditTeams: [],
+  adminConfig: {}
 });
 
 if (!Array.isArray(db.data.documents)) {
   db.data.documents = [];
 }
+
+if (!Array.isArray(db.data.campaigns)) {
+  db.data.campaigns = [];
+}
+
+db.data.campaigns = db.data.campaigns.map((campaign) => ({
+  ...campaign,
+  projectCode: typeof campaign.projectCode === "string" ? campaign.projectCode : "",
+  language: campaign.language === "en" ? "en" : "fr",
+  framework: typeof campaign.framework === "string" && campaign.framework.trim().length > 0 ? campaign.framework : "À définir"
+}));
 
 if (!Array.isArray(db.data.metricScales)) {
   db.data.metricScales = [];
@@ -288,8 +383,51 @@ if (!Array.isArray(db.data.auditReports)) {
   db.data.auditReports = [];
 }
 
+if (!Array.isArray(db.data.auditTeams)) {
+  db.data.auditTeams = [];
+}
+
+db.data.auditTeams = db.data.auditTeams
+  .filter((item) => item && typeof item === "object")
+  .map((item) => ({
+    id: typeof item.id === "string" ? item.id : "",
+    campaignId: typeof item.campaignId === "string" ? item.campaignId : "",
+    memberIds: Array.isArray(item.memberIds) ? item.memberIds.filter((memberId) => typeof memberId === "string") : []
+  }))
+  .filter((item) => item.id.length > 0 && item.campaignId.length > 0);
+
 if (!Array.isArray(db.data.auditLogs)) {
   db.data.auditLogs = [];
 }
+
+if (!Array.isArray(db.data.referentialDocuments)) {
+  db.data.referentialDocuments = [];
+}
+
+if (!Array.isArray(db.data.referentials)) {
+  db.data.referentials = [];
+}
+
+if (!Array.isArray(db.data.referentialRequirements)) {
+  db.data.referentialRequirements = [];
+}
+
+if (!db.data.adminConfig) {
+  db.data.adminConfig = {};
+}
+
+if (!Array.isArray(db.data.adminConfig.auditDirectory)) {
+  db.data.adminConfig.auditDirectory = [];
+}
+
+db.data.adminConfig.auditDirectory = db.data.adminConfig.auditDirectory
+  .filter((item) => item && typeof item === "object")
+  .map((item): AuditDirectoryEntry => ({
+    id: typeof item.id === "string" ? item.id : "",
+    fullName: typeof item.fullName === "string" ? item.fullName : "",
+    profile: item.profile === "expert" ? "expert" : "auditeur",
+    email: typeof item.email === "string" ? item.email : ""
+  }))
+  .filter((item) => item.id.length > 0 && item.fullName.trim().length > 0);
 
 await db.write();

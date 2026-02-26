@@ -1,5 +1,52 @@
 # Guide de Démarrage Rubis
 
+## 🐧 WSL2 / Linux (équivalent)
+
+```bash
+# Terminal WSL2 dans le dossier du projet
+cd ~/Rubis
+
+# Première fois
+./install-ollama.sh
+
+# Fois suivantes
+./start-rubis.sh
+
+# Browser
+http://localhost:5173
+```
+
+Notes WSL2 :
+- Utiliser de préférence un dossier Linux (`~/Rubis`) plutôt que `/mnt/c/...` pour de meilleures performances.
+- Si besoin d'exécution : `chmod +x *.sh`
+
+### Troubleshooting WSL2
+
+**Port déjà utilisé (11434 ou 5173)**
+- Vérifier les processus dans WSL: `ss -ltnp | grep -E '11434|5173|4000'`
+- Stopper un process: `kill <PID>`
+- Si Ollama tourne déjà côté Windows, ne pas relancer `ollama serve` dans WSL.
+
+**Accès navigateur à l'app**
+- Ouvrir `http://localhost:5173` depuis Windows (WSL2 expose localhost automatiquement).
+- Si inaccessible, vérifier que le serveur Vite est bien lancé et sans erreur.
+
+**Performance lente sous `/mnt/c/...`**
+- Symptômes: hot-reload lent, `npm install` plus long.
+- Solution recommandée: cloner/déplacer le repo dans le home Linux (`~/Rubis`).
+
+**Scripts `.sh` non exécutables**
+- Rendre exécutables: `chmod +x install-ollama.sh setup-ollama.sh start-rubis.sh`
+- Lancer explicitement avec bash si besoin: `bash ./start-rubis.sh`
+
+**Fin de ligne CRLF (erreur `^M`)**
+- Convertir en LF: `sed -i 's/\r$//' *.sh`
+- Config Git recommandée dans WSL: `git config --global core.autocrlf input`
+
+**Ollama installé sur Windows seulement**
+- Option A (simple): utiliser les scripts PowerShell côté Windows.
+- Option B (WSL natif): installer Ollama dans WSL via `./install-ollama.sh`.
+
 ## 🚀 Démarrage Ultra-Rapide (2 scripts)
 
 ### Étape 1 : Installer Ollama + Mistral (une seule fois)

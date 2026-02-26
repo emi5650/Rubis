@@ -1,22 +1,86 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
-import { randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, extname, resolve } from "node:path";
 import { Document, Packer, Paragraph, TextRun } from "docx";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { db } from "./db.js";
 import { ROADMAP_DATA } from "./roadmap-data.js";
 import { generateFallbackQuestions } from "./services/questionGenerator.js";
-import { generateQuestionsFromReferential } from "./services/openai.js";
-import { parseReferentialFile } from "./services/referentialParser.js";
+import { extractAuditDocumentMetadata, generateQuestionsFromReferential, transformReferentialToRubisFormat } from "./services/openai.js";
+import { parseReferentialFile, parseTabularFile } from "./services/referentialParser.js";
 import { createOutlookClient, createOutlookEvent, updateOutlookEvent, deleteOutlookEvent, buildEventPayload } from "./services/outlookSync.js";
+
+const envDir = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: resolve(envDir, "../.env") });
 
 const app = Fastify({ logger: true });
 
 await app.register(cors, { origin: true });
 await app.register(multipart, { limits: { fileSize: 52428800 } }); // 50MB limit
+
+const uploadsDir = resolve(envDir, "../data/uploads");
+mkdirSync(uploadsDir, { recursive: true });
+
+type PendingDocumentUpload = {
+  id: string;
+  campaignId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+  uploadedAt: string;
+};
+
+const pendingDocumentUploads = new Map<string, PendingDocumentUpload>();
+
+const encryptionSecret = process.env.RUBIS_SECRET || process.env.OPENAI_KEY_SECRET || "";
+
+function deriveEncryptionKey() {
+  if (!encryptionSecret) {
+    return null;
+  }
+
+  return createHash("sha256").update(encryptionSecret, "utf8").digest();
+}
+
+function encryptSecret(value: string) {
+  const key = deriveEncryptionKey();
+  if (!key) {
+    throw new Error("Encryption secret not configured. Set RUBIS_SECRET.");
+  }
+
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  return {
+    encrypted: encrypted.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: tag.toString("base64")
+  };
+}
+
+function decryptSecret(record: { encrypted: string; iv: string; tag: string }) {
+  const key = deriveEncryptionKey();
+  if (!key) {
+    throw new Error("Encryption secret not configured. Set RUBIS_SECRET.");
+  }
+
+  const iv = Buffer.from(record.iv, "base64");
+  const tag = Buffer.from(record.tag, "base64");
+  const encrypted = Buffer.from(record.encrypted, "base64");
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return decrypted.toString("utf8");
+}
 
 async function logAction(campaignId: string, action: string, details: string) {
   if (!campaignId) {
@@ -36,6 +100,15 @@ async function logAction(campaignId: string, action: string, details: string) {
   }
 
   await db.write();
+}
+
+let currentOpenAiKey = "";
+if (db.data.adminConfig?.openAiKey) {
+  try {
+    currentOpenAiKey = decryptSecret(db.data.adminConfig.openAiKey);
+  } catch (error) {
+    app.log.warn("Failed to decrypt OpenAI key from storage");
+  }
 }
 
 function formatLocalIso(date: Date) {
@@ -197,11 +270,20 @@ function generateInterviewSlots(options: {
 
 app.get("/health", async () => ({ status: "ok" }));
 
+const projectCodePattern = /^[A-Za-z0-9_]+-\d{6}-[A-Za-z0-9_]+-[A-Za-z0-9_-]+$/;
+
 app.post("/campaigns", async (request, reply) => {
   const bodySchema = z.object({
     name: z.string().min(3),
-    language: z.enum(["fr", "en"]),
-    framework: z.string().min(2)
+    projectCode: z
+      .string()
+      .trim()
+      .regex(
+        projectCodePattern,
+        "Le code projet doit suivre le format ID_Client-999999-Client-Mention"
+      ),
+    language: z.enum(["fr", "en"]).default("fr"),
+    framework: z.string().trim().min(1).default("À définir")
   });
 
   const body = bodySchema.parse(request.body);
@@ -219,6 +301,105 @@ app.post("/campaigns", async (request, reply) => {
 });
 
 app.get("/campaigns", async () => db.data.campaigns);
+
+app.get("/admin/audit-directory", async () => {
+  db.data.adminConfig = db.data.adminConfig || {};
+  db.data.adminConfig.auditDirectory = db.data.adminConfig.auditDirectory || [];
+  return db.data.adminConfig.auditDirectory;
+});
+
+app.post("/admin/audit-directory", async (request, reply) => {
+  const bodySchema = z.object({
+    fullName: z.string().trim().min(2),
+    profile: z.enum(["auditeur", "expert"]).default("auditeur"),
+    email: z.string().trim().email().or(z.literal(""))
+  });
+
+  const body = bodySchema.parse(request.body);
+  const entry = {
+    id: randomUUID(),
+    fullName: body.fullName,
+    profile: body.profile,
+    email: body.email
+  };
+
+  db.data.adminConfig = db.data.adminConfig || {};
+  db.data.adminConfig.auditDirectory = db.data.adminConfig.auditDirectory || [];
+  db.data.adminConfig.auditDirectory.unshift(entry);
+  await db.write();
+
+  return reply.code(201).send(entry);
+});
+
+app.delete("/admin/audit-directory/:id", async (request, reply) => {
+  const paramsSchema = z.object({ id: z.string().uuid() });
+  const { id } = paramsSchema.parse(request.params);
+
+  db.data.adminConfig = db.data.adminConfig || {};
+  db.data.adminConfig.auditDirectory = db.data.adminConfig.auditDirectory || [];
+  const previousLength = db.data.adminConfig.auditDirectory.length;
+  db.data.adminConfig.auditDirectory = db.data.adminConfig.auditDirectory.filter((item) => item.id !== id);
+
+  if (db.data.adminConfig.auditDirectory.length === previousLength) {
+    return reply.code(404).send({ message: "Member not found" });
+  }
+
+  db.data.auditTeams = db.data.auditTeams.map((team) => ({
+    ...team,
+    memberIds: team.memberIds.filter((memberId) => memberId !== id)
+  }));
+
+  await db.write();
+  return reply.code(200).send({ success: true });
+});
+
+app.get("/audit-teams/:campaignId", async (request) => {
+  const paramsSchema = z.object({ campaignId: z.string().uuid() });
+  const { campaignId } = paramsSchema.parse(request.params);
+
+  const existing = db.data.auditTeams.find((item) => item.campaignId === campaignId);
+  if (existing) {
+    return existing;
+  }
+
+  return {
+    id: "default",
+    campaignId,
+    memberIds: []
+  };
+});
+
+app.post("/audit-teams", async (request, reply) => {
+  const bodySchema = z.object({
+    campaignId: z.string().uuid(),
+    memberIds: z.array(z.string().uuid()).default([])
+  });
+
+  const body = bodySchema.parse(request.body);
+  const allowedIds = new Set((db.data.adminConfig?.auditDirectory || []).map((item) => item.id));
+  const unknownMemberId = body.memberIds.find((memberId) => !allowedIds.has(memberId));
+
+  if (unknownMemberId) {
+    return reply.code(400).send({ message: "One or more team members are not present in Paramétrage" });
+  }
+
+  const uniqueMemberIds = Array.from(new Set(body.memberIds));
+  const existingIndex = db.data.auditTeams.findIndex((item) => item.campaignId === body.campaignId);
+  const team = {
+    id: existingIndex >= 0 ? db.data.auditTeams[existingIndex].id : randomUUID(),
+    campaignId: body.campaignId,
+    memberIds: uniqueMemberIds
+  };
+
+  if (existingIndex >= 0) {
+    db.data.auditTeams[existingIndex] = team;
+  } else {
+    db.data.auditTeams.push(team);
+  }
+
+  await db.write();
+  return reply.code(201).send(team);
+});
 
 // Roadmap data - imported from generated module
 const roadmapData = ROADMAP_DATA || [];
@@ -355,11 +536,19 @@ app.post("/documents", async (request, reply) => {
   const bodySchema = z.object({
     campaignId: z.string().uuid(),
     name: z.string().min(2),
-    theme: z.string().min(2),
+    theme: z.string().min(1).default("Référentiel audité"),
     version: z.string().min(1),
     date: z.string().min(4),
     sensitivity: z.string().min(2),
-    summary: z.string().max(2000).default("")
+    summary: z.string().max(2000).default(""),
+    internalId: z.string().default(""),
+    authors: z.string().default(""),
+    history: z.string().default(""),
+    pageCount: z.number().int().positive().nullable().optional(),
+    sourceFilename: z.string().default(""),
+    sourceMimeType: z.string().default(""),
+    sourceSize: z.number().int().nonnegative().optional(),
+    sourceStoragePath: z.string().default("")
   });
 
   const body = bodySchema.parse(request.body);
@@ -373,6 +562,190 @@ app.post("/documents", async (request, reply) => {
   await logAction(document.campaignId, "document.created", document.name);
 
   return reply.code(201).send(document);
+});
+
+function normalizeMetadataFallback(input: {
+  filename: string;
+  pageCount: number | null;
+  contentExcerpt: string;
+}) {
+  const cleanName = input.filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+  const lines = input.contentExcerpt
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return {
+    title: lines[0] || cleanName || "Document audité",
+    version: "",
+    publicationDate: "",
+    authors: [] as string[],
+    history: "",
+    pageCount: input.pageCount,
+    sensitivity: "interne",
+    summary: lines.slice(0, 3).join(" ").slice(0, 600)
+  };
+}
+
+function buildInternalDocumentId(campaignId: string) {
+  const count = db.data.documents.filter((doc) => doc.campaignId === campaignId).length + 1;
+  return `DOC-${new Date().getFullYear()}-${String(count).padStart(4, "0")}`;
+}
+
+app.post("/documents/analyze-upload", async (request, reply) => {
+  try {
+    const data = await request.file();
+    if (!data) {
+      reply.code(400);
+      return { message: "No file provided" };
+    }
+
+    const fields = (data as any).fields as Record<string, { value?: string } | Array<{ value?: string }>>;
+    const rawCampaignField = fields?.campaignId;
+    const campaignId = Array.isArray(rawCampaignField)
+      ? String(rawCampaignField[0]?.value || "")
+      : String(rawCampaignField?.value || "");
+
+    const campaignIdSchema = z.string().uuid();
+    campaignIdSchema.parse(campaignId);
+
+    const buffer = await data.toBuffer();
+    const filename = data.filename || `document-${Date.now()}`;
+    const mimeType = data.mimetype || "application/octet-stream";
+
+    const extension = extname(filename);
+    const safeBase = filename
+      .replace(extension, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(0, 80);
+    const storageName = `${Date.now()}-${randomUUID()}-${safeBase}${extension}`;
+    const storagePath = resolve(uploadsDir, storageName);
+    writeFileSync(storagePath, buffer);
+
+    let contentExcerpt = "";
+    let pageCount: number | null = null;
+
+    if (mimeType.startsWith("image/")) {
+      contentExcerpt = "";
+      pageCount = 1;
+    } else {
+      try {
+        const parsed = await parseReferentialFile(buffer, mimeType || filename);
+        contentExcerpt = parsed.content.slice(0, 12000);
+        pageCount = parsed.pageCount ?? null;
+      } catch {
+        contentExcerpt = "";
+        pageCount = null;
+      }
+    }
+
+    const fallback = normalizeMetadataFallback({ filename, pageCount, contentExcerpt });
+
+    let extracted = fallback;
+    let extractedBy = "fallback";
+    try {
+      const extraction = await extractAuditDocumentMetadata({
+        filename,
+        mimeType,
+        contentExcerpt,
+        pageCountHint: pageCount,
+        imageBase64: mimeType.startsWith("image/") ? buffer.toString("base64") : undefined
+      });
+      extracted = extraction.metadata;
+      extractedBy = extraction.provider === "ollama" ? "ollama" : "openai";
+    } catch (error) {
+      app.log.warn(`Metadata extraction fallback used: ${error instanceof Error ? error.message : "unknown"}`);
+    }
+
+    const tempUploadId = randomUUID();
+    pendingDocumentUploads.set(tempUploadId, {
+      id: tempUploadId,
+      campaignId,
+      filename,
+      mimeType,
+      size: buffer.length,
+      storagePath,
+      uploadedAt: new Date().toISOString()
+    });
+
+    return {
+      success: true,
+      tempUploadId,
+      metadata: extracted,
+      extractedBy,
+      file: {
+        filename,
+        mimeType,
+        size: buffer.length
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+app.post("/documents/confirm-upload", async (request, reply) => {
+  try {
+    const bodySchema = z.object({
+      campaignId: z.string().uuid(),
+      tempUploadId: z.string().uuid(),
+      title: z.string().min(2),
+      version: z.string().default(""),
+      publicationDate: z.string().default(""),
+      authors: z.array(z.string()).default([]),
+      history: z.string().default(""),
+      pageCount: z.number().int().positive().nullable().default(null),
+      sensitivity: z.string().default("interne"),
+      summary: z.string().max(4000).default(""),
+      theme: z.string().default("Référentiel audité")
+    });
+
+    const body = bodySchema.parse(request.body);
+    const pending = pendingDocumentUploads.get(body.tempUploadId);
+    if (!pending) {
+      reply.code(404);
+      return { message: "Temporary upload not found" };
+    }
+
+    if (pending.campaignId !== body.campaignId) {
+      reply.code(400);
+      return { message: "Campaign mismatch for temporary upload" };
+    }
+
+    const document = {
+      id: randomUUID(),
+      campaignId: body.campaignId,
+      name: body.title,
+      theme: body.theme,
+      version: body.version || "",
+      date: body.publicationDate || "",
+      sensitivity: body.sensitivity || "interne",
+      summary: body.summary || "",
+      internalId: buildInternalDocumentId(body.campaignId),
+      authors: body.authors.join(", "),
+      history: body.history,
+      pageCount: body.pageCount,
+      sourceFilename: pending.filename,
+      sourceMimeType: pending.mimeType,
+      sourceSize: pending.size,
+      sourceStoragePath: pending.storagePath
+    };
+
+    db.data.documents.unshift(document);
+    pendingDocumentUploads.delete(body.tempUploadId);
+    await db.write();
+    await logAction(body.campaignId, "document.created.ai", `${document.internalId} - ${document.name}`);
+
+    return reply.code(201).send(document);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
 });
 
 app.get("/documents/:campaignId", async (request) => {
@@ -1394,6 +1767,725 @@ app.post("/generate-questions-from-referential", async (request, reply) => {
   }
 });
 
+app.get("/admin/openai-key/status", async () => ({
+  configured: Boolean(currentOpenAiKey),
+  updatedAt: db.data.adminConfig?.openAiKey?.updatedAt || null
+}));
+
+app.post("/admin/openai-key", async (request, reply) => {
+  try {
+    const bodySchema = z.object({
+      apiKey: z.string().min(20)
+    });
+
+    const body = bodySchema.parse(request.body);
+    const encrypted = encryptSecret(body.apiKey);
+
+    db.data.adminConfig = db.data.adminConfig || {};
+    db.data.adminConfig.openAiKey = {
+      ...encrypted,
+      updatedAt: new Date().toISOString()
+    };
+
+    currentOpenAiKey = body.apiKey;
+    await db.write();
+
+    return reply.code(200).send({ configured: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+app.get("/referentials", async () => {
+  return db.data.referentials.map((referential) => ({
+    ...referential,
+    requirementCount: db.data.referentialRequirements.filter(
+      (item) => item.referentialId === referential.id
+    ).length
+  }));
+});
+
+app.get("/referentials/:id/requirements", async (request, reply) => {
+  const paramsSchema = z.object({ id: z.string().min(1) });
+  const params = paramsSchema.parse(request.params);
+
+  const referential = db.data.referentials.find((item) => item.id === params.id);
+  if (!referential) {
+    reply.code(404);
+    return { message: "Referential not found" };
+  }
+
+  return db.data.referentialRequirements
+    .filter((item) => item.referentialId === params.id)
+    .map((item) => ({
+      ...item,
+      requirementTitle: item.requirementTitle ?? ""
+    }));
+});
+
+// Analyze referential without saving (for preview)
+async function analyzeRubisFormat(buffer: Buffer, filename: string) {
+  const mimeType = filename || "";
+  
+  app.log.info(`Analyzing referential file: ${filename} (${buffer.length} bytes)`);
+  const parsed = await parseReferentialFile(buffer, mimeType);
+  app.log.info(`Parsed content: ${parsed.title} (${parsed.content.length} chars)`);
+
+  const aiResult = await transformReferentialToRubisFormat({
+    referentialContent: parsed.content,
+    referentialTitle: parsed.title
+  });
+  app.log.info(`AI analysis complete: ${aiResult.requirements.length} requirements detected`);
+
+  return {
+    filename,
+    aiResult,
+    preview: {
+      referentialName: aiResult.referential.name,
+      referentialVersion: aiResult.referential.version,
+      documentName: aiResult.referential.documentName,
+      documentVersion: aiResult.referential.documentVersion,
+      documentDate: aiResult.referential.documentDate,
+      requirementCount: aiResult.requirements.length,
+      requirements: aiResult.requirements.slice(0, 10), // Show first 10
+      hasMore: aiResult.requirements.length > 10
+    }
+  };
+}
+
+// Save analyzed referential to database
+async function saveAnalyzedReferential(buffer: Buffer, filename: string, aiResult: any) {
+  const originalName = filename || `referential-${Date.now()}`;
+  const extension = extname(originalName);
+  const safeBase = originalName
+    .replace(extension, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(0, 80);
+  const storageName = `${Date.now()}-${randomUUID()}-${safeBase}${extension}`;
+  const storagePath = resolve(uploadsDir, storageName);
+  writeFileSync(storagePath, buffer);
+
+  const now = new Date().toISOString();
+  const documentId = randomUUID();
+  db.data.referentialDocuments.unshift({
+    id: documentId,
+    filename: filename || "referential",
+    mimeType: "",
+    size: buffer.length,
+    storagePath,
+    uploadedAt: now,
+    extractedName: aiResult.referential.documentName,
+    extractedVersion: aiResult.referential.documentVersion,
+    extractedDate: aiResult.referential.documentDate
+  });
+
+  const referentialId = randomUUID();
+  db.data.referentials.unshift({
+    id: referentialId,
+    name: aiResult.referential.name,
+    version: aiResult.referential.version,
+    documentName: aiResult.referential.documentName,
+    documentVersion: aiResult.referential.documentVersion,
+    documentDate: aiResult.referential.documentDate,
+    importedAt: now,
+    sourceDocumentId: documentId
+  });
+
+  const requirements = aiResult.requirements.map((req: any) => ({
+    id: randomUUID(),
+    referentialId,
+    requirementId: req.requirementId,
+    requirementTitle: req.requirementTitle ?? "",
+    themeLevel1: req.themeLevel1,
+    themeLevel1Title: req.themeLevel1Title,
+    themeLevel2: req.themeLevel2,
+    themeLevel2Title: req.themeLevel2Title,
+    themeLevel3: req.themeLevel3,
+    themeLevel3Title: req.themeLevel3Title,
+    themeLevel4: req.themeLevel4,
+    themeLevel4Title: req.themeLevel4Title,
+    requirementText: req.requirementText,
+    scopes: req.scopes
+  }));
+
+  db.data.referentialRequirements.unshift(...requirements);
+  await db.write();
+
+  return { referentialId, requirementCount: requirements.length };
+}
+
+async function performRubisFormatImport(request: any, reply: any, buffer: Buffer, data: any) {
+  try {
+    const originalName = data.filename || `referential-${Date.now()}`;
+    const extension = extname(originalName);
+    const safeBase = originalName
+      .replace(extension, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(0, 80);
+    const storageName = `${Date.now()}-${randomUUID()}-${safeBase}${extension}`;
+    const storagePath = resolve(uploadsDir, storageName);
+    writeFileSync(storagePath, buffer);
+
+    const now = new Date().toISOString();
+    const documentId = randomUUID();
+    db.data.referentialDocuments.unshift({
+      id: documentId,
+      filename: data.filename || "referential",
+      mimeType: data.mimetype || "",
+      size: buffer.length,
+      storagePath,
+      uploadedAt: now,
+      extractedName: "",
+      extractedVersion: "",
+      extractedDate: ""
+    });
+
+    const referentialId = randomUUID();
+    db.data.referentials.unshift({
+      id: referentialId,
+      name: "",
+      version: "",
+      documentName: "",
+      documentVersion: "",
+      documentDate: "",
+      importedAt: now,
+      sourceDocumentId: documentId
+    });
+
+    await db.write();
+
+    return {
+      success: true,
+      referentialId,
+      documentId,
+      requirementCount: 0
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+}
+
+// DEPRECATED - kept for compatibility
+async function performRubisFormatImportOld(request: any, reply: any, buffer: Buffer, data: any) {
+  try {
+    const mimeType = data.mimetype || data.filename || "";
+    
+    app.log.info(`Parsing referential file: ${data.filename} (${buffer.length} bytes)`);
+    const parsed = await parseReferentialFile(buffer, mimeType);
+    app.log.info(`Parsed content: ${parsed.title} (${parsed.content.length} chars)`);
+
+    const aiResult = await transformReferentialToRubisFormat({
+      referentialContent: parsed.content,
+      referentialTitle: parsed.title
+    });
+    app.log.info(`AI transformation complete: ${aiResult.requirements.length} requirements extracted`);
+
+    const originalName = data.filename || `referential-${Date.now()}`;
+    const extension = extname(originalName);
+    const safeBase = originalName
+      .replace(extension, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(0, 80);
+    const storageName = `${Date.now()}-${randomUUID()}-${safeBase}${extension}`;
+    const storagePath = resolve(uploadsDir, storageName);
+    writeFileSync(storagePath, buffer);
+
+    const now = new Date().toISOString();
+    const documentId = randomUUID();
+    db.data.referentialDocuments.unshift({
+      id: documentId,
+      filename: data.filename || "referential",
+      mimeType: data.mimetype || "",
+      size: buffer.length,
+      storagePath,
+      uploadedAt: now,
+      extractedName: aiResult.referential.documentName,
+      extractedVersion: aiResult.referential.documentVersion,
+      extractedDate: aiResult.referential.documentDate
+    });
+
+    const referentialId = randomUUID();
+    db.data.referentials.unshift({
+      id: referentialId,
+      name: aiResult.referential.name,
+      version: aiResult.referential.version,
+      documentName: aiResult.referential.documentName,
+      documentVersion: aiResult.referential.documentVersion,
+      documentDate: aiResult.referential.documentDate,
+      importedAt: now,
+      sourceDocumentId: documentId
+    });
+
+    const requirements = aiResult.requirements.map((req) => ({
+      id: randomUUID(),
+      referentialId,
+      requirementId: req.requirementId,
+      requirementTitle: req.requirementTitle ?? "",
+      themeLevel1: req.themeLevel1,
+      themeLevel1Title: req.themeLevel1Title,
+      themeLevel2: req.themeLevel2,
+      themeLevel2Title: req.themeLevel2Title,
+      themeLevel3: req.themeLevel3,
+      themeLevel3Title: req.themeLevel3Title,
+      themeLevel4: req.themeLevel4,
+      themeLevel4Title: req.themeLevel4Title,
+      requirementText: req.requirementText,
+      scopes: req.scopes
+    }));
+
+    db.data.referentialRequirements.unshift(...requirements);
+    await db.write();
+
+    return {
+      success: true,
+      referentialId,
+      requirementCount: requirements.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+}
+
+app.post("/referentials/import", async (request, reply) => {
+  try {
+    const data = await request.file();
+    if (!data) {
+      reply.code(400);
+      return { message: "No file provided" };
+    }
+
+    if (!currentOpenAiKey) {
+      reply.code(400);
+      app.log.error("OpenAI key not configured for referential import");
+      return { message: "OpenAI key not configured. Please set it in Administration." };
+    }
+
+    const buffer = await data.toBuffer();
+    return await performRubisFormatImport(request, reply, buffer, data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+// Preview endpoint - analyze without saving
+app.post("/referentials/import/preview/rubis", async (request, reply) => {
+  try {
+    const data = await request.file();
+    if (!data) {
+      reply.code(400);
+      return { message: "No file provided" };
+    }
+
+    if (!currentOpenAiKey) {
+      reply.code(400);
+      app.log.error("OpenAI key not configured for referential import");
+      return { message: "OpenAI key not configured. Please set it in Administration." };
+    }
+
+    const buffer = await data.toBuffer();
+    const analysis = await analyzeRubisFormat(buffer, data.filename);
+
+    return {
+      success: true,
+      preview: analysis.preview
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+// Confirm endpoint - save the analyzed data
+app.post("/referentials/import/confirm/rubis", async (request, reply) => {
+  try {
+    const data = await request.file();
+    if (!data) {
+      reply.code(400);
+      return { message: "No file provided" };
+    }
+
+    if (!currentOpenAiKey) {
+      reply.code(400);
+      return { message: "OpenAI key not configured. Please set it in Administration." };
+    }
+
+    const buffer = await data.toBuffer();
+    const analysis = await analyzeRubisFormat(buffer, data.filename);
+    const result = await saveAnalyzedReferential(buffer, data.filename, analysis.aiResult);
+
+    return {
+      success: true,
+      referentialId: result.referentialId,
+      requirementCount: result.requirementCount
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+app.post("/referentials/import/rubis", async (request, reply) => {
+  try {
+    const data = await request.file();
+    if (!data) {
+      reply.code(400);
+      return { message: "No file provided" };
+    }
+
+    if (!currentOpenAiKey) {
+      reply.code(400);
+      app.log.error("OpenAI key not configured for referential import");
+      return { message: "OpenAI key not configured. Please set it in Administration." };
+    }
+
+    const buffer = await data.toBuffer();
+    return await performRubisFormatImport(request, reply, buffer, data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+// Preview list import - extract headers and sample rows
+app.post("/referentials/import/list/preview", async (request, reply) => {
+  try {
+    const data = await request.file();
+    const { sheet } = request.query as { sheet?: string };
+    
+    if (!data) {
+      reply.code(400);
+      return { message: "No file provided" };
+    }
+
+    const buffer = await data.toBuffer();
+    const mimeType = data.mimetype || data.filename || "";
+    const parsed = parseTabularFile(buffer, mimeType, sheet);
+    const sampleRows = parsed.rows.slice(0, 30);
+
+    return {
+      success: true,
+      preview: {
+        headers: parsed.headers,
+        sampleRows,
+        sheets: parsed.sheets || [],
+        currentSheet: parsed.currentSheet,
+        totalRows: parsed.rows.length
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+app.post("/referentials/import/list", async (request, reply) => {
+  try {
+    const data = await request.file();
+    const AUTO_VALUE = "__AUTO__";
+    let requirementIdCol = "Code";
+    let requirementTitleCol = "Titre";
+    let requirementTextCol = "Texte";
+    let scopesCol = "Scopes";
+    let themeLevel1Col = AUTO_VALUE;
+    let themeLevel1TitleCol = AUTO_VALUE;
+    let themeLevel2Col = AUTO_VALUE;
+    let themeLevel2TitleCol = AUTO_VALUE;
+    let themeLevel3Col = AUTO_VALUE;
+    let themeLevel3TitleCol = AUTO_VALUE;
+    let themeLevel4Col = AUTO_VALUE;
+    let themeLevel4TitleCol = AUTO_VALUE;
+
+    const multipartFields = (data as any)?.fields;
+    if (multipartFields) {
+      requirementIdCol = String(multipartFields.requirementIdColumn?.value ?? "Code") || "Code";
+      requirementTitleCol = String(multipartFields.requirementTitleColumn?.value ?? "Titre") || "Titre";
+      requirementTextCol = String(multipartFields.requirementTextColumn?.value ?? "Texte") || "Texte";
+      scopesCol = String(multipartFields.scopesColumn?.value ?? "Scopes") || "Scopes";
+      themeLevel1Col = String(multipartFields.themeLevel1Column?.value ?? AUTO_VALUE) || AUTO_VALUE;
+      themeLevel1TitleCol = String(multipartFields.themeLevel1TitleColumn?.value ?? AUTO_VALUE) || AUTO_VALUE;
+      themeLevel2Col = String(multipartFields.themeLevel2Column?.value ?? AUTO_VALUE) || AUTO_VALUE;
+      themeLevel2TitleCol = String(multipartFields.themeLevel2TitleColumn?.value ?? AUTO_VALUE) || AUTO_VALUE;
+      themeLevel3Col = String(multipartFields.themeLevel3Column?.value ?? AUTO_VALUE) || AUTO_VALUE;
+      themeLevel3TitleCol = String(multipartFields.themeLevel3TitleColumn?.value ?? AUTO_VALUE) || AUTO_VALUE;
+      themeLevel4Col = String(multipartFields.themeLevel4Column?.value ?? AUTO_VALUE) || AUTO_VALUE;
+      themeLevel4TitleCol = String(multipartFields.themeLevel4TitleColumn?.value ?? AUTO_VALUE) || AUTO_VALUE;
+    }
+
+    if (!data) {
+      reply.code(400);
+      return { message: "No file provided" };
+    }
+
+    const buffer = await data.toBuffer();
+    const mimeType = data.mimetype || data.filename || "";
+    
+    app.log.info(`Parsing list file: ${data.filename} (${buffer.length} bytes)`);
+    const parsed = parseTabularFile(buffer, mimeType);
+
+    const now = new Date().toISOString();
+    const documentId = randomUUID();
+    db.data.referentialDocuments.unshift({
+      id: documentId,
+      filename: data.filename || "list",
+      mimeType: data.mimetype || "",
+      size: buffer.length,
+      storagePath: resolve(uploadsDir, `${randomUUID()}-${data.filename}`),
+      uploadedAt: now,
+      extractedName: "Liste d'exigences",
+      extractedVersion: "1.0",
+      extractedDate: new Date().toISOString().split('T')[0]
+    });
+
+    const referentialId = randomUUID();
+    db.data.referentials.unshift({
+      id: referentialId,
+      name: "Liste d'exigences",
+      version: "1.0",
+      documentName: data.filename || "list",
+      documentVersion: "1.0",
+      documentDate: new Date().toISOString().split('T')[0],
+      importedAt: now,
+      sourceDocumentId: documentId
+    });
+
+    const getValue = (row: Record<string, string>, column: string) => {
+      if (!column || column === AUTO_VALUE) {
+        return "";
+      }
+      return String(row[column] ?? "").trim();
+    };
+
+    const requirements = parsed.rows
+      .map((row, idx) => {
+        const requirementId = getValue(row, requirementIdCol) || `REQ-${idx + 1}`;
+        const requirementTitle = getValue(row, requirementTitleCol);
+        const requirementText = getValue(row, requirementTextCol);
+        const rawScopes = getValue(row, scopesCol);
+        const scopes = rawScopes
+          ? rawScopes.split(/[;,|]/).map((scope) => scope.trim()).filter(Boolean)
+          : [];
+
+        const derivedText = requirementText || requirementTitle;
+        if (!derivedText) {
+          return null;
+        }
+
+        const themeLevel1 = getValue(row, themeLevel1Col);
+        const themeLevel1Title = getValue(row, themeLevel1TitleCol);
+        const themeLevel2 = getValue(row, themeLevel2Col);
+        const themeLevel2Title = getValue(row, themeLevel2TitleCol);
+        const themeLevel3 = getValue(row, themeLevel3Col);
+        const themeLevel3Title = getValue(row, themeLevel3TitleCol);
+        const themeLevel4 = getValue(row, themeLevel4Col);
+        const themeLevel4Title = getValue(row, themeLevel4TitleCol);
+
+        return {
+          id: randomUUID(),
+          referentialId,
+          requirementId,
+          requirementTitle,
+          themeLevel1,
+          themeLevel1Title: themeLevel1Title || (requirementTitle ? requirementTitle.substring(0, 50) : derivedText.substring(0, 50)),
+          themeLevel2,
+          themeLevel2Title,
+          themeLevel3,
+          themeLevel3Title,
+          themeLevel4,
+          themeLevel4Title,
+          requirementText: derivedText,
+          scopes: scopes.length > 0 ? scopes : ["IMPORTED"]
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+    db.data.referentialRequirements.unshift(...requirements);
+    await db.write();
+
+    return {
+      success: true,
+      referentialId,
+      requirementCount: requirements.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+app.post("/referentials/import/freetext", async (request, reply) => {
+  try {
+    if (!currentOpenAiKey) {
+      reply.code(400);
+      app.log.error("OpenAI key not configured for referential import");
+      return { message: "OpenAI key not configured. Please set it in Administration." };
+    }
+
+    const body = await request.body as { name?: string; text?: string };
+    const name = body?.name || "Texte libre";
+    const text = body?.text || "";
+
+    if (!text.trim()) {
+      reply.code(400);
+      return { message: "No text provided" };
+    }
+
+    const aiResult = await transformReferentialToRubisFormat({
+      referentialContent: text,
+      referentialTitle: name
+    });
+
+    const now = new Date().toISOString();
+    const documentId = randomUUID();
+    db.data.referentialDocuments.unshift({
+      id: documentId,
+      filename: `freetext-${Date.now()}.txt`,
+      mimeType: "text/plain",
+      size: text.length,
+      storagePath: resolve(uploadsDir, `freetext-${randomUUID()}.txt`),
+      uploadedAt: now,
+      extractedName: aiResult.referential.documentName,
+      extractedVersion: aiResult.referential.documentVersion,
+      extractedDate: aiResult.referential.documentDate
+    });
+
+    const referentialId = randomUUID();
+    db.data.referentials.unshift({
+      id: referentialId,
+      name: aiResult.referential.name,
+      version: aiResult.referential.version,
+      documentName: aiResult.referential.documentName,
+      documentVersion: aiResult.referential.documentVersion,
+      documentDate: aiResult.referential.documentDate,
+      importedAt: now,
+      sourceDocumentId: documentId
+    });
+
+    const requirements = aiResult.requirements.map((req) => ({
+      id: randomUUID(),
+      referentialId,
+      requirementId: req.requirementId,
+      requirementTitle: req.requirementTitle ?? "",
+      themeLevel1: req.themeLevel1,
+      themeLevel1Title: req.themeLevel1Title,
+      themeLevel2: req.themeLevel2,
+      themeLevel2Title: req.themeLevel2Title,
+      themeLevel3: req.themeLevel3,
+      themeLevel3Title: req.themeLevel3Title,
+      themeLevel4: req.themeLevel4,
+      themeLevel4Title: req.themeLevel4Title,
+      requirementText: req.requirementText,
+      scopes: req.scopes
+    }));
+
+    db.data.referentialRequirements.unshift(...requirements);
+    await db.write();
+
+    return {
+      success: true,
+      referentialId,
+      requirementCount: requirements.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+app.get("/referentials/:id/export", async (request, reply) => {
+  try {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    
+    const referential = db.data.referentials.find((item) => item.id === params.id);
+    if (!referential) {
+      reply.code(404);
+      return { message: "Referential not found" };
+    }
+
+    const requirements = db.data.referentialRequirements
+      .filter((req) => req.referentialId === params.id)
+      .map((req) => ({
+        ...req,
+        requirementTitle: req.requirementTitle ?? ""
+      }));
+
+    return {
+      success: true,
+      data: {
+        referential,
+        requirements
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
+
+app.delete("/referentials/:id", async (request, reply) => {
+  try {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    
+    const referentialIndex = db.data.referentials.findIndex((item) => item.id === params.id);
+    if (referentialIndex === -1) {
+      reply.code(404);
+      return { message: "Referential not found" };
+    }
+
+    const referential = db.data.referentials[referentialIndex];
+    
+    // Remove the referential
+    db.data.referentials.splice(referentialIndex, 1);
+    
+    // Remove associated requirements
+    db.data.referentialRequirements = db.data.referentialRequirements.filter(
+      (req) => req.referentialId !== params.id
+    );
+    
+    // Remove associated document
+    if (referential.sourceDocumentId) {
+      db.data.referentialDocuments = db.data.referentialDocuments.filter(
+        (doc) => doc.id !== referential.sourceDocumentId
+      );
+    }
+    
+    await db.write();
+    
+    return { success: true, message: "Referential deleted" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    app.log.error(error);
+    reply.code(400);
+    return { message };
+  }
+});
+
 // Model configuration state - can be changed at runtime
 let currentOllamaModel = process.env.OLLAMA_MODEL || "mistral";
 
@@ -1420,6 +2512,10 @@ app.post("/config", async (request, reply) => {
 // Export for use in other modules
 export function getOllamaModel() {
   return currentOllamaModel;
+}
+
+export function getOpenAiApiKey() {
+  return currentOpenAiKey;
 }
 
 const port = Number(process.env.API_PORT || 4000);

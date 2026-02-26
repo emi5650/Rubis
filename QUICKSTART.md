@@ -43,6 +43,25 @@ npm run dev
 
 ---
 
+### Mode 3: WSL2/Linux (Offline)
+
+```bash
+# 1. Setup Ollama + Mistral (automatisé)
+./install-ollama.sh
+
+# 2. Démarrer Rubis (lance Ollama + app)
+./start-rubis.sh
+
+# 3. Ouvrir
+http://localhost:5173
+```
+
+**Notes** :
+- Exécuter depuis WSL2 dans un dossier Linux (`~/Rubis` recommandé)
+- Les scripts `.ps1` sont dédiés Windows PowerShell
+
+---
+
 ## 🎯 Workflow de Base
 
 1. **Créer campagne audit** ("ISO 19011 2026")

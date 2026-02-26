@@ -1,0 +1,4 @@
+model,elapsedSeconds,isValidJson,itemCount,score,error
+mistral,-1.0,false,0,0,This operation was aborted
+qwen2.5:7b-instruct,-1.0,false,0,0,This operation was aborted
+gemma3:4b,-1.0,false,0,0,This operation was aborted

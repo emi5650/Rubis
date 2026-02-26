@@ -11,6 +11,21 @@ Outil d'audit métier (cybersécurité et audits alignés ISO 19011), offline-fi
 
 ## Démarrage
 
+### 🐧 WSL2 / Linux (nouveau)
+
+```bash
+cd ~/Rubis
+
+# Première fois (installe Ollama + télécharge Mistral)
+./install-ollama.sh
+
+# Fois suivantes (lance Ollama + Rubis)
+./start-rubis.sh
+
+# Ouvrir navigateur
+http://localhost:5173
+```
+
 ### 🚀 Rapide (Recommandé - Ollama Offline)
 
 ```powershell
@@ -66,6 +81,16 @@ http://localhost:5173
 - [GETTING_STARTED.md](./GETTING_STARTED.md) - Guide de démarrage détaillé (recommandé pour première fois)
 - [SETUP_OLLAMA.md](./SETUP_OLLAMA.md) - Configuration Ollama avancée
 - [SETUP_OPENAI.md](./SETUP_OPENAI.md) - Configuration OpenAI + tarifs
+- [MIGRATION_WSL2.md](./MIGRATION_WSL2.md) - Migration complète Windows → WSL2
+- [RPI_SETUP.md](./RPI_SETUP.md) - Déploiement Raspberry Pi (RPi 4/5)
+
+### Scripts disponibles
+
+- **Windows PowerShell**: `install-ollama.ps1`, `setup-ollama.ps1`, `start-rubis.ps1`
+- **WSL2 / Linux (bash)**: `install-ollama.sh`, `setup-ollama.sh`, `start-rubis.sh`
+- **Migration WSL2**: `migrate-to-wsl2.sh` (copie vers `~/Rubis` + `npm install`)
+- **Bootstrap WSL2 (PowerShell)**: `bootstrap-wsl2.ps1` (installe WSL + setup post-install)
+- **Bootstrap Raspberry Pi**: `bootstrap-rpi.sh` (Node + deps + Ollama)
 
 ## Base locale (reset + seed)
 

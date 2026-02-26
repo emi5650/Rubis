@@ -1,28 +1,23 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, ReactElement, cloneElement, useEffect, useState } from "react";
 import { RoadmapViewer } from "./RoadmapViewer";
 import { GanttCalendar } from "./GanttCalendar";
-
-type Language = "fr" | "en";
-
-type InterviewSlot = {
-  id: string;
-  title: string;
-  startAt: string;
-  endAt: string;
-  mode: string;
-  room: string;
-  teamsLink: string;
-  theme: string;
-  criterionCode: string;
-  outlookSyncEnabled?: boolean;
-  outlookEventId?: string;
-};
+import logoPassi from "./assets/logo_passi.png";
+import logoSopra from "./assets/logo_sopra.png";
+import { LEGACY_NAV_GROUPS } from "./legacy/navigation";
+import { buildLegacyHash, parseLegacyRouteFromHash } from "./legacy/routing";
+import { CampaignSummary, CampaignTab, InterviewSlot, Language, NavGroup, RouteState } from "./legacy/types";
 
 const API_URL = "http://localhost:4000";
+const OPEN_CAMPAIGN_TABS_STORAGE_KEY = "rubis.openCampaignTabs";
+const ACTIVE_CAMPAIGN_TAB_STORAGE_KEY = "rubis.activeCampaignTabId";
+const MAX_OPEN_CAMPAIGN_TABS = 5;
 
 export function App() {
   const [viewMode, setViewMode] = useState<"workspace" | "dashboard" | "roadmap">("workspace");
   const [campaignId, setCampaignId] = useState("");
+  const [campaignTabs, setCampaignTabs] = useState<CampaignTab[]>([]);
+  const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
+  const [campaignToOpenId, setCampaignToOpenId] = useState("");
   const [criterionId, setCriterionId] = useState("");
   const [language, setLanguage] = useState<Language>("fr");
   const [ollamaModel, setOllamaModel] = useState("mistral");
@@ -72,6 +67,36 @@ export function App() {
   const [outlookAccessToken, setOutlookAccessToken] = useState("");
   const [ganttViewEnabled, setGanttViewEnabled] = useState(false);
 
+  const navGroups: NavGroup[] = LEGACY_NAV_GROUPS;
+
+  const defaultGroup = navGroups[0];
+  const defaultItem = defaultGroup.items[0];
+
+  function parseRouteFromHash(hash: string): RouteState {
+    return parseLegacyRouteFromHash(hash, navGroups);
+  }
+
+  function buildHash(view: RouteState["view"], groupId?: string, itemId?: string): string {
+    return buildLegacyHash(view, navGroups, groupId, itemId);
+  }
+
+  function navigateTo(view: RouteState["view"], groupId?: string, itemId?: string) {
+    const nextHash = buildHash(view, groupId, itemId);
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash;
+    }
+  }
+
+  const [routeState, setRouteState] = useState<RouteState>(() => parseRouteFromHash(window.location.hash));
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setRouteState(parseRouteFromHash(window.location.hash));
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
   function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
       return error.message;
@@ -104,10 +129,146 @@ export function App() {
     setKnownActions((previous) => Array.from(new Set([...previous, ...incoming])).sort());
   }
 
+  function getCampaignLabel(targetCampaignId: string): string {
+    const opened = campaignTabs.find((tab) => tab.id === targetCampaignId);
+    if (opened) {
+      return opened.name;
+    }
+
+    const known = availableCampaigns.find((campaign) => campaign.id === targetCampaignId);
+    return known?.name || targetCampaignId;
+  }
+
+  async function loadAvailableCampaigns() {
+    try {
+      const data = await requestJson<CampaignSummary[]>(`${API_URL}/campaigns`);
+      setAvailableCampaigns(data || []);
+    } catch (error) {
+      setErrorMessage(`Chargement des campagnes impossible: ${getErrorMessage(error)}`);
+    }
+  }
+
+  function openCampaignTab(tab: CampaignTab): boolean {
+    const existing = campaignTabs.find((item) => item.id === tab.id);
+    if (existing) {
+      setCampaignId(existing.id);
+      return true;
+    }
+
+    if (campaignTabs.length >= MAX_OPEN_CAMPAIGN_TABS) {
+      setErrorMessage(`Maximum ${MAX_OPEN_CAMPAIGN_TABS} campagnes ouvertes. Ferme un onglet avant d'en ouvrir une autre.`);
+      return false;
+    }
+
+    setCampaignTabs((previous) => [...previous, tab]);
+    setCampaignId(tab.id);
+    return true;
+  }
+
+  function closeCampaignTab(tabId: string) {
+    const nextTabs = campaignTabs.filter((tab) => tab.id !== tabId);
+    setCampaignTabs(nextTabs);
+
+    if (campaignId === tabId) {
+      setCampaignId(nextTabs[0]?.id || "");
+    }
+  }
+
+  function rotateCampaignTabs(direction: 1 | -1) {
+    if (campaignTabs.length < 2 || !campaignId) {
+      return;
+    }
+
+    const currentIndex = campaignTabs.findIndex((tab) => tab.id === campaignId);
+    const fallbackIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = (fallbackIndex + direction + campaignTabs.length) % campaignTabs.length;
+    setCampaignId(campaignTabs[nextIndex].id);
+  }
+
+  useEffect(() => {
+    const rawTabs = localStorage.getItem(OPEN_CAMPAIGN_TABS_STORAGE_KEY);
+    const rawActive = localStorage.getItem(ACTIVE_CAMPAIGN_TAB_STORAGE_KEY);
+
+    if (rawTabs) {
+      try {
+        const parsed = JSON.parse(rawTabs) as Array<{ id?: string; name?: string }>;
+        const sanitized = parsed
+          .filter((item) => typeof item?.id === "string" && item.id.length > 0)
+          .slice(0, MAX_OPEN_CAMPAIGN_TABS)
+          .map((item) => ({ id: item.id as string, name: item.name?.trim() || item.id as string }));
+
+        if (sanitized.length > 0) {
+          setCampaignTabs(sanitized);
+          const hasStoredActive = typeof rawActive === "string" && sanitized.some((item) => item.id === rawActive);
+          setCampaignId(hasStoredActive ? rawActive : sanitized[0].id);
+        }
+      } catch {
+        localStorage.removeItem(OPEN_CAMPAIGN_TABS_STORAGE_KEY);
+        localStorage.removeItem(ACTIVE_CAMPAIGN_TAB_STORAGE_KEY);
+      }
+    }
+
+    void loadAvailableCampaigns();
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(OPEN_CAMPAIGN_TABS_STORAGE_KEY, JSON.stringify(campaignTabs));
+    localStorage.setItem(ACTIVE_CAMPAIGN_TAB_STORAGE_KEY, campaignId);
+  }, [campaignTabs, campaignId]);
+
+  useEffect(() => {
+    if (availableCampaigns.length === 0) {
+      setCampaignToOpenId("");
+      return;
+    }
+
+    setCampaignTabs((previous) =>
+      previous.map((tab) => {
+        const match = availableCampaigns.find((campaign) => campaign.id === tab.id);
+        return match ? { id: tab.id, name: match.name } : tab;
+      })
+    );
+
+    if (!campaignToOpenId || !availableCampaigns.some((campaign) => campaign.id === campaignToOpenId)) {
+      setCampaignToOpenId(availableCampaigns[0].id);
+    }
+  }, [availableCampaigns]);
+
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.key !== "Tab") {
+        return;
+      }
+
+      event.preventDefault();
+      rotateCampaignTabs(event.shiftKey ? -1 : 1);
+    };
+
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, [campaignTabs, campaignId]);
+
+  useEffect(() => {
+    setCriterionId("");
+    setGenerated([]);
+    setInterviewSlots([]);
+    setThemeSuggestion("");
+    setSuggestedDocuments([]);
+    setSuggestedCriteria([]);
+    setLatestInterviewNoteId("");
+    setCriterionScore("");
+    setMatrixDetails([]);
+    setConformityMatrixSummary("");
+    setSelectedReportTitle("");
+    setSelectedReportContent("");
+    setGeneratedQuestionsFromAi([]);
+  }, [campaignId]);
+
   useEffect(() => {
     if (!campaignId) {
       setDocuments([]);
       setInterviewees([]);
+      setInterviewSlots([]);
       setReports([]);
       setAuditLogs([]);
       setKnownActions([]);
@@ -161,14 +322,16 @@ export function App() {
         language
       };
 
-      const data = await requestJson<{ id: string }>(`${API_URL}/campaigns`, {
+      const data = await requestJson<CampaignSummary>(`${API_URL}/campaigns`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
 
-      setCampaignId(data.id || "");
-      setStatus("Campagne créée");
+      setAvailableCampaigns((previous) => [data, ...previous.filter((item) => item.id !== data.id)]);
+
+      const opened = openCampaignTab({ id: data.id, name: data.name || payload.name });
+      setStatus(opened ? "Campagne créée et ouverte" : "Campagne créée (onglets au maximum)");
     } catch (error) {
       setErrorMessage(`Création campagne impossible: ${getErrorMessage(error)}`);
     }
@@ -1055,95 +1218,190 @@ export function App() {
     return acc;
   }, {});
 
+  const isTabLimitReached = campaignTabs.length >= MAX_OPEN_CAMPAIGN_TABS;
+  const activeGroup = navGroups.find((group) => group.id === routeState.groupId) || defaultGroup;
+  const activeItem = activeGroup.items.find((item) => item.id === routeState.itemId) || activeGroup.items[0];
+  const activeSectionIds = activeItem?.sectionIds || [];
+  const isSectionActive = (sectionId: string) => activeSectionIds.includes(sectionId);
+  const renderSection = (sectionId: string, content: ReactElement<{ className?: string }>) => {
+    if (!isSectionActive(sectionId)) {
+      return null;
+    }
+
+    const baseClass = content.props.className || "";
+    return cloneElement(content, {
+      className: `${baseClass} card-active`.trim()
+    });
+  };
+
+  useEffect(() => {
+    if (routeState.view !== "workspace") {
+      return;
+    }
+
+    const firstSection = activeSectionIds[0];
+    if (!firstSection) {
+      return;
+    }
+
+    const target = document.getElementById(firstSection);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [routeState.view, routeState.groupId, routeState.itemId, activeSectionIds]);
+
   return (
     <main className="page">
-      <h1>Rubis - MVP Audit</h1>
-      <p>Phase 1.1: préparation des entretiens et génération de questions.</p>
-      <div className="view-switch">
-        <button type="button" onClick={() => setViewMode("workspace")}>Mode Saisie</button>
-        <button
-          type="button"
-          onClick={() => {
-            setViewMode("dashboard");
-            void loadDashboardData();
-          }}
-        >
-          Mode Dashboard
-        </button>
-        <button type="button" onClick={() => setViewMode("roadmap")}>📊 Roadmap</button>
-      </div>
-      {errorMessage ? <p className="status-error">{errorMessage}</p> : null}
-
-      {viewMode === "dashboard" ? (
-        <>
-          <section className="card">
-            <h2>Dashboard campagne</h2>
-            <p>ID campagne: {campaignId || "-"}</p>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void loadDashboardData();
-              }}
-            >
-              <select value={logPeriod} onChange={(event) => setLogPeriod(event.target.value as "7d" | "30d" | "all") }>
-                <option value="7d">Logs 7 jours</option>
-                <option value="30d">Logs 30 jours</option>
-                <option value="all">Logs tout</option>
-              </select>
-              <select value={logActionFilter} onChange={(event) => setLogActionFilter(event.target.value)}>
-                <option value="all">Actions: toutes</option>
-                {knownActions.map((actionName) => (
-                  <option key={actionName} value={actionName}>
-                    {actionName}
-                  </option>
+      <header className="app-header">
+        <div>
+          <h1>Rubis - MVP Audit</h1>
+          <p>Phase 1.1: préparation des entretiens et génération de questions.</p>
+        </div>
+        <div className="logo-carousel" aria-label="Logos partenaires">
+          <img className="logo-item" src={logoPassi} alt="PASSI" />
+          <img className="logo-item" src={logoSopra} alt="Sopra Steria" />
+        </div>
+      </header>
+      {routeState.view === "workspace" ? (
+        <div className="layout">
+          <aside className="sidebar">
+            <div className="sidebar-section">
+              <div className="sidebar-header">
+                <h3>Menu</h3>
+              </div>
+              <nav className="nav-groups" aria-label="Navigation audit">
+                {navGroups.map((group) => (
+                  <div key={group.id} className={`nav-group ${activeGroup.id === group.id ? "active" : ""}`}>
+                    <button
+                      type="button"
+                      className="nav-group-title"
+                      onClick={() => navigateTo("workspace", group.id, group.items[0].id)}
+                    >
+                      <span className="nav-icon">{group.icon}</span>
+                      <span>{group.label}</span>
+                    </button>
+                    {activeGroup.id === group.id && (
+                      <nav className="nav-items">
+                        {group.items.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`nav-item ${activeItem.id === item.id ? "active" : ""}`}
+                            onClick={() => navigateTo("workspace", group.id, item.id)}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </nav>
+                    )}
+                  </div>
                 ))}
-              </select>
-              <button type="submit" disabled={!campaignId}>
-                Rafraîchir KPIs
-              </button>
-            </form>
-            <div className="dashboard-grid">
-              <div className="dashboard-kpi"><strong>Documents</strong><span>{dashboardKpis.documentsCount}</span></div>
-              <div className="dashboard-kpi"><strong>Interviewés</strong><span>{dashboardKpis.intervieweesCount}</span></div>
-              <div className="dashboard-kpi"><strong>Questions</strong><span>{dashboardKpis.questionsCount}</span></div>
-              <div className="dashboard-kpi"><strong>Notes entretien</strong><span>{dashboardKpis.interviewNotesCount}</span></div>
-              <div className="dashboard-kpi"><strong>Docs en attente</strong><span>{dashboardKpis.pendingDocumentsCount}</span></div>
-              <div className="dashboard-kpi"><strong>Rapports</strong><span>{dashboardKpis.reportsCount}</span></div>
+              </nav>
             </div>
-          </section>
+          </aside>
 
-          <section className="card">
-            <h2>Matrice de conformité</h2>
-            <p>{conformityMatrixSummary || "-"}</p>
-            <button type="button" onClick={exportMatrixCsv} disabled={matrixDetails.length === 0}>
-              Exporter matrice CSV
-            </button>
-            <ul>
-              {matrixDetails.map((item) => (
-                <li key={`${item.code}-${item.title}`}>
-                  {item.code} - {item.title} ({item.theme}) : {item.weightedAverage === null ? "N/A" : item.weightedAverage.toFixed(2)} [{item.answeredQuestions}/{item.totalQuestions}]
-                </li>
-              ))}
-            </ul>
-          </section>
+          <div className="content">
+            <div className="view-switch">
+              <button type="button" onClick={() => navigateTo("workspace")}>Mode Saisie</button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigateTo("dashboard");
+                  void loadDashboardData();
+                }}
+              >
+                Mode Dashboard
+              </button>
+              <button type="button" onClick={() => navigateTo("roadmap")}>📊 Roadmap</button>
+            </div>
+            {errorMessage ? <p className="status-error">{errorMessage}</p> : null}
 
-          <section className="card">
-            <h2>Dernières actions</h2>
-            <ul>
-              {auditLogs.slice(0, 20).map((logItem) => (
-                <li key={logItem.id}>
-                  {logItem.timestamp} - {logItem.action} - {logItem.details}
-                </li>
-              ))}
-            </ul>
-          </section>
-        </>
-      ) : null}
+            {renderSection(
+              "campaign-tabs",
+              <section className="card" id="campaign-tabs">
+              <h2>Campagnes ouvertes</h2>
+              <div className="campaign-toolbar">
+                <span className="campaign-badge">
+                  {campaignTabs.length}/{MAX_OPEN_CAMPAIGN_TABS} ouvertes
+                </span>
+                <span className="campaign-hint">
+                  {isTabLimitReached ? "Limite atteinte" : "Ctrl+Tab pour naviguer"}
+                </span>
+              </div>
+              <div className="campaign-tabs">
+                {campaignTabs.length === 0 ? <span className="campaign-empty">Aucune campagne ouverte</span> : null}
+                {campaignTabs.map((tab) => (
+                  <div key={tab.id} className={`campaign-tab ${campaignId === tab.id ? "active" : ""}`}>
+                    <button
+                      type="button"
+                      className="campaign-tab-select"
+                      onClick={() => setCampaignId(tab.id)}
+                      title={tab.id}
+                    >
+                      {tab.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="campaign-tab-close"
+                      onClick={() => closeCampaignTab(tab.id)}
+                      aria-label={`Fermer ${tab.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
 
-      {viewMode === "workspace" ? (
-        <>
+                  const selected = availableCampaigns.find((item) => item.id === campaignToOpenId);
+                  if (!selected) {
+                    setErrorMessage("Sélectionne une campagne valide à ouvrir");
+                    return;
+                  }
 
-      <section className="card">
+                  setErrorMessage("");
+                  const opened = openCampaignTab({ id: selected.id, name: selected.name });
+                  if (opened) {
+                    setStatus(`Campagne ouverte: ${selected.name}`);
+                  }
+                }}
+              >
+                <select
+                  value={campaignToOpenId}
+                  onChange={(event) => setCampaignToOpenId(event.target.value)}
+                  disabled={availableCampaigns.length === 0}
+                >
+                  {availableCampaigns.length === 0 ? <option value="">Aucune campagne disponible</option> : null}
+                  {availableCampaigns.map((campaign) => (
+                    <option key={campaign.id} value={campaign.id}>
+                      {campaign.name} ({campaign.framework})
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" disabled={!campaignToOpenId || isTabLimitReached}>Ouvrir campagne</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void loadAvailableCampaigns();
+                    setStatus("Liste des campagnes rafraîchie");
+                  }}
+                >
+                  Rafraîchir liste
+                </button>
+                <a className="campaign-link" href="#create-campaign">Nouvelle campagne</a>
+              </form>
+              <p>
+                Campagne active: {campaignId ? `${getCampaignLabel(campaignId)} (${campaignId})` : "-"}
+                {campaignTabs.length > 1 ? " | Raccourci: Ctrl+Tab" : ""}
+              </p>
+            </section>
+            )}
+
+      {renderSection(
+        "create-campaign",
+        <section className="card" id="create-campaign">
         <h2>Créer une campagne</h2>
         <form onSubmit={createCampaign}>
           <input name="name" placeholder="Nom de campagne" required />
@@ -1191,8 +1449,11 @@ export function App() {
         </form>
         <p>ID campagne: {campaignId || "-"}</p>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "criteria",
+        <section className="card" id="criteria">
         <h2>Créer un critère</h2>
         <form onSubmit={createCriterion}>
           <input name="code" placeholder="Code (ex: A.5.1)" required />
@@ -1204,8 +1465,11 @@ export function App() {
         </form>
         <p>ID critère: {criterionId || "-"}</p>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "questions",
+        <section className="card" id="questions">
         <h2>Générer des questions</h2>
         <form onSubmit={generateQuestions}>
           <input name="audienceRole" placeholder="Profil audité (ex: DSI, RSSI)" required />
@@ -1219,8 +1483,11 @@ export function App() {
           ))}
         </ul>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "ai-config",
+        <section className="card" id="ai-config">
         <h2>Configuration IA</h2>
         <div>
           <label>Modèle Ollama actuel: <strong>{ollamaModel}</strong></label>
@@ -1245,8 +1512,11 @@ export function App() {
           </div>
         </div>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "ai-referential",
+        <section className="card" id="ai-referential">
         <h2>Générer des questions via IA (référentiel)</h2>
         <form onSubmit={generateQuestionsFromReferential}>
           <input
@@ -1277,8 +1547,11 @@ export function App() {
           </div>
         )}
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "documents",
+        <section className="card" id="documents">
         <h2>Référentiel documentaire (Phase 1.2)</h2>
         <form onSubmit={addDocument}>
           <input name="name" placeholder="Nom du document" required />
@@ -1304,8 +1577,11 @@ export function App() {
           ))}
         </ul>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "metrics",
+        <section className="card" id="metrics">
         <h2>Échelles de métriques</h2>
         <form onSubmit={saveMetricScale}>
           <input name="confidentiality" placeholder="Confidentialité (ex: 1-5)" defaultValue="1-5" required />
@@ -1317,8 +1593,11 @@ export function App() {
           </button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "convention",
+        <section className="card" id="convention">
         <h2>Convention d'audit</h2>
         <form onSubmit={saveConvention}>
           <input name="auditedOrganization" placeholder="Partie auditée" required />
@@ -1340,8 +1619,11 @@ export function App() {
           </button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "scoping",
+        <section className="card" id="scoping">
         <h2>Note de cadrage</h2>
         <form onSubmit={saveScopingNote}>
           <input name="objectives" placeholder="Objectifs" required />
@@ -1354,8 +1636,11 @@ export function App() {
           </button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "interviewees",
+        <section className="card" id="interviewees">
         <h2>Fiches interviewés (Phase 1.3)</h2>
         <form onSubmit={addInterviewee}>
           <input name="fullName" placeholder="Nom complet" required />
@@ -1374,8 +1659,11 @@ export function App() {
           ))}
         </ul>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "document-review",
+        <section className="card" id="document-review">
         <h2>Analyse documentaire</h2>
         <form onSubmit={saveDocumentReview}>
           <input name="documentId" placeholder="ID document" required />
@@ -1396,8 +1684,11 @@ export function App() {
           </button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "audit-plan",
+        <section className="card" id="audit-plan">
         <h2>Plan d'audit</h2>
         <form onSubmit={saveAuditPlan}>
           <input name="objectives" placeholder="Objectifs" required />
@@ -1411,8 +1702,11 @@ export function App() {
           </button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "calendar",
+        <section className="card" id="calendar">
         <h2>Calendrier d'audit</h2>
         <div style={{ marginBottom: "12px" }}>
           <label>Token Outlook (OAuth2): </label>
@@ -1526,8 +1820,11 @@ export function App() {
           </div>
         )}
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "slots",
+        <section className="card" id="slots">
         <h2>Créneaux d'entretien</h2>
         <form onSubmit={createInterviewSlot}>
           <input name="title" placeholder="Titre du créneau" required />
@@ -1553,8 +1850,11 @@ export function App() {
           </button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "suggestions",
+        <section className="card" id="suggestions">
         <h2>Suggestions documents par thème</h2>
         <form onSubmit={loadThemeSuggestions}>
           <input
@@ -1585,8 +1885,11 @@ export function App() {
           ))}
         </ul>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "interview-note",
+        <section className="card" id="interview-note">
         <h2>Phase 1.4 - Note d'entretien</h2>
         <form onSubmit={startInterviewNote}>
           <input name="slotId" placeholder="ID créneau" required />
@@ -1601,8 +1904,11 @@ export function App() {
         </form>
         <p>ID note active: {latestInterviewNoteId || "-"}</p>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "attendance",
+        <section className="card" id="attendance">
         <h2>Présences</h2>
         <form onSubmit={addAttendance}>
           <input name="noteId" placeholder="ID note (optionnel si active)" />
@@ -1619,8 +1925,11 @@ export function App() {
           </button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "pending-docs",
+        <section className="card" id="pending-docs">
         <h2>Documents à transmettre</h2>
         <form onSubmit={addPendingDocument}>
           <input name="interviewNoteId" placeholder="ID note (optionnel si active)" />
@@ -1637,8 +1946,11 @@ export function App() {
           <button type="submit">Marquer reçu</button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "document-refs",
+        <section className="card" id="document-refs">
         <h2>Références documentaires dans la note</h2>
         <form onSubmit={addDocumentReference}>
           <input name="noteId" placeholder="ID note (optionnel si active)" />
@@ -1650,8 +1962,11 @@ export function App() {
           </button>
         </form>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "scoring",
+        <section className="card" id="scoring">
         <h2>Scoring conformité des questions</h2>
         <form onSubmit={saveInterviewAnswer}>
           <input name="interviewNoteId" placeholder="ID note (optionnel si active)" />
@@ -1680,8 +1995,11 @@ export function App() {
         </button>
         <p>{conformityMatrixSummary}</p>
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "report",
+        <section className="card" id="report">
         <h2>Phase 1.5 - Rapport d'audit (socle MVP)</h2>
         <form
           onSubmit={(event) => {
@@ -1744,8 +2062,11 @@ export function App() {
           rows={18}
         />
       </section>
+      )}
 
-      <section className="card">
+      {renderSection(
+        "audit-log",
+        <section className="card" id="audit-log">
         <h2>Journal d'actions</h2>
         <form
           onSubmit={(event) => {
@@ -1777,13 +2098,13 @@ export function App() {
           ))}
         </ul>
       </section>
+      )}
 
-        </>
-      ) : viewMode === "roadmap" ? (
+          </div>
+        </div>
+      ) : routeState.view === "roadmap" ? (
         <RoadmapViewer />
       ) : null}
-
-      <p>{status}</p>
     </main>
   );
 }

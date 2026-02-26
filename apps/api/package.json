@@ -21,6 +21,7 @@
     "fastify": "^5.2.1",
     "isomorphic-fetch": "^3.0.0",
     "lowdb": "^7.0.1",
+    "mammoth": "^1.11.0",
     "openai": "^4.52.7",
     "pdf-parse": "^1.1.1",
     "react-beautiful-dnd": "^13.1.1",

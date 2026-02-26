@@ -3,6 +3,7 @@ export type Language = "fr" | "en";
 export interface AuditCampaign {
   id: string;
   name: string;
+  projectCode: string;
   language: Language;
   framework: string;
   createdAt: string;

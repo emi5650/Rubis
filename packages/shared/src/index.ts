@@ -2,8 +2,9 @@ export type Language = "fr" | "en";
 
 export interface CampaignPayload {
   name: string;
-  language: Language;
-  framework: string;
+  projectCode: string;
+  language?: Language;
+  framework?: string;
 }
 
 export interface CriterionPayload {
