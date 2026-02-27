@@ -31,6 +31,13 @@ export const MENU_ENTRIES: MenuEntry[] = [
     description: "Collecte, revue et qualification des preuves documentaires."
   },
   {
+    id: "document-registry",
+    label: "Document Registry",
+    path: "/document-registry",
+    icon: FiSearch,
+    description: "Référentiel documentaire avec extraction IA, validation et traçabilité."
+  },
+  {
     id: "entretiens",
     label: "Entretiens",
     path: "/entretiens",

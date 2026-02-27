@@ -19,3 +19,5 @@ export interface QuestionGenerationPayload {
   audienceRole: string;
   language: Language;
 }
+
+export * from "./types/documentRegistry";

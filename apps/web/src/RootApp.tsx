@@ -12,6 +12,8 @@ import { RedactionPage } from "./pages/RedactionPage";
 import { ParametragePage } from "./pages/ParametragePage";
 import { AdministrationPage } from "./pages/AdministrationPage";
 import { LegacyWorkspacePage } from "./pages/LegacyWorkspacePage";
+import { DocumentRegistryPage } from "./pages/DocumentRegistryPage";
+import { DocumentDetailPage } from "./pages/DocumentDetailPage";
 import theme from "./theme";
 
 const queryClient = new QueryClient({
@@ -47,6 +49,8 @@ export function RootApp() {
                   <Route path="/preliminaire" element={<Navigate to="/organisation" replace />} />
                   <Route path="/preparation" element={<PreparationPage campaignId={campaignId} />} />
                   <Route path="/analyse-documentaire" element={<AnalyseDocumentairePage campaignId={campaignId} />} />
+                  <Route path="/document-registry" element={<DocumentRegistryPage campaignId={campaignId} />} />
+                  <Route path="/document-registry/:id" element={<DocumentDetailPage campaignId={campaignId} />} />
                   <Route path="/entretiens" element={<EntretiensPage campaignId={campaignId} />} />
                   <Route path="/redaction" element={<RedactionPage campaignId={campaignId} />} />
                   <Route path="/parametrage" element={<ParametragePage campaignId={campaignId} />} />

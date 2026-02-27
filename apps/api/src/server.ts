@@ -15,6 +15,7 @@ import { generateFallbackQuestions } from "./services/questionGenerator.js";
 import { extractAuditDocumentMetadata, generateQuestionsFromReferential, transformReferentialToRubisFormat } from "./services/openai.js";
 import { parseReferentialFile, parseTabularFile } from "./services/referentialParser.js";
 import { createOutlookClient, createOutlookEvent, updateOutlookEvent, deleteOutlookEvent, buildEventPayload } from "./services/outlookSync.js";
+import { documentRegistryRoutes } from "./routes.documents.js";
 
 const envDir = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(envDir, "../.env") });
@@ -269,6 +270,8 @@ function generateInterviewSlots(options: {
 }
 
 app.get("/health", async () => ({ status: "ok" }));
+
+await documentRegistryRoutes(app);
 
 const projectCodePattern = /^[A-Za-z0-9_]+-\d{6}-[A-Za-z0-9_]+-[A-Za-z0-9_-]+$/;
 
@@ -753,6 +756,87 @@ app.get("/documents/:campaignId", async (request) => {
   const { campaignId } = paramsSchema.parse(request.params);
 
   return db.data.documents.filter((item) => item.campaignId === campaignId);
+});
+
+app.put("/documents/item/:documentId", async (request, reply) => {
+  const paramsSchema = z.object({ documentId: z.string().uuid() });
+  const bodySchema = z.object({
+    campaignId: z.string().uuid(),
+    name: z.string().min(2),
+    version: z.string().default(""),
+    date: z.string().default(""),
+    sensitivity: z.string().min(2),
+    summary: z.string().max(4000).default(""),
+    authors: z.string().default(""),
+    history: z.string().default(""),
+    pageCount: z.number().int().positive().nullable().optional(),
+    theme: z.string().min(1).default("Référentiel audité")
+  });
+
+  const { documentId } = paramsSchema.parse(request.params);
+  const body = bodySchema.parse(request.body);
+
+  const index = db.data.documents.findIndex((item) => item.id === documentId);
+  if (index < 0) {
+    return reply.code(404).send({ message: "Document not found" });
+  }
+
+  const existing = db.data.documents[index];
+  if (existing.campaignId !== body.campaignId) {
+    return reply.code(400).send({ message: "Campaign mismatch" });
+  }
+
+  db.data.documents[index] = {
+    ...existing,
+    name: body.name,
+    version: body.version,
+    date: body.date,
+    sensitivity: body.sensitivity,
+    summary: body.summary,
+    authors: body.authors,
+    history: body.history,
+    pageCount: body.pageCount ?? null,
+    theme: body.theme
+  };
+
+  await db.write();
+  await logAction(
+    body.campaignId,
+    "document.updated",
+    `${existing.internalId || existing.id} - ${existing.name} -> ${body.name}`
+  );
+
+  return reply.code(200).send(db.data.documents[index]);
+});
+
+app.delete("/documents/item/:documentId", async (request, reply) => {
+  const paramsSchema = z.object({ documentId: z.string().uuid() });
+  const bodySchema = z.object({ campaignId: z.string().uuid() });
+
+  const { documentId } = paramsSchema.parse(request.params);
+  const { campaignId } = bodySchema.parse(request.body);
+
+  const index = db.data.documents.findIndex((item) => item.id === documentId);
+  if (index < 0) {
+    return reply.code(404).send({ message: "Document not found" });
+  }
+
+  const existing = db.data.documents[index];
+  if (existing.campaignId !== campaignId) {
+    return reply.code(400).send({ message: "Campaign mismatch" });
+  }
+
+  db.data.documents.splice(index, 1);
+  db.data.documentReviews = db.data.documentReviews.filter((item) => item.documentId !== documentId);
+
+  await db.write();
+  await logAction(
+    campaignId,
+    "document.deleted",
+    `${existing.internalId || existing.id} - ${existing.name}`
+  );
+
+  return reply.code(200).send({ success: true });
 });
 
 app.post("/metric-scales", async (request, reply) => {

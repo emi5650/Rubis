@@ -260,6 +260,51 @@ interface ReferentialRequirementRecord {
   scopes: string[];
 }
 
+interface RegistryEvidenceRecord {
+  snippet: string;
+  locator?: {
+    kind: "page" | "slide" | "sheet" | "line";
+    index?: number;
+    name?: string;
+  };
+  matchedText?: string;
+}
+
+interface RegistryExtractedFieldRecord {
+  value?: string;
+  confidence: "high" | "medium" | "low";
+  source: "content" | "metadata" | "filename" | "user";
+  evidence?: RegistryEvidenceRecord;
+}
+
+interface DocumentRegistryRecord {
+  id: string;
+  campaignId: string;
+  createdAt: string;
+  updatedAt: string;
+  currentFileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+  title: RegistryExtractedFieldRecord;
+  version: RegistryExtractedFieldRecord;
+  publishedAt: RegistryExtractedFieldRecord;
+  author: RegistryExtractedFieldRecord;
+  sensitivity: RegistryExtractedFieldRecord;
+  status: "imported" | "extracted" | "needs_review" | "validated" | "archived";
+}
+
+interface DocumentRegistryEventRecord {
+  id: string;
+  campaignId: string;
+  documentId: string;
+  action: "uploaded" | "extracted" | "updated" | "validated" | "archived" | "deleted";
+  actor: "system" | "user";
+  timestamp: string;
+  details: string;
+}
+
 export interface RubisDb {
   campaigns: Campaign[];
   criteria: Criterion[];
@@ -283,6 +328,8 @@ export interface RubisDb {
   referentials: ReferentialRecord[];
   referentialRequirements: ReferentialRequirementRecord[];
   auditTeams: AuditTeamRecord[];
+  documentRegistry: DocumentRegistryRecord[];
+  documentRegistryEvents: DocumentRegistryEventRecord[];
   adminConfig: AdminConfigRecord;
 }
 
@@ -313,6 +360,8 @@ export const db = await JSONFilePreset<RubisDb>(dbPath, {
   referentials: [],
   referentialRequirements: [],
   auditTeams: [],
+  documentRegistry: [],
+  documentRegistryEvents: [],
   adminConfig: {}
 });
 
@@ -410,6 +459,14 @@ if (!Array.isArray(db.data.referentials)) {
 
 if (!Array.isArray(db.data.referentialRequirements)) {
   db.data.referentialRequirements = [];
+}
+
+if (!Array.isArray(db.data.documentRegistry)) {
+  db.data.documentRegistry = [];
+}
+
+if (!Array.isArray(db.data.documentRegistryEvents)) {
+  db.data.documentRegistryEvents = [];
 }
 
 if (!db.data.adminConfig) {

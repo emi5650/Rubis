@@ -195,6 +195,120 @@ export function getDocuments(campaignId: string) {
   }>>(`/documents/${campaignId}`);
 }
 
+export function updateDocument(
+  documentId: string,
+  input: {
+    campaignId: string;
+    name: string;
+    version: string;
+    date: string;
+    sensitivity: string;
+    summary: string;
+    authors: string;
+    history: string;
+    pageCount: number | null;
+    theme?: string;
+  }
+) {
+  return request(`/documents/item/${documentId}`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteDocument(documentId: string, campaignId: string) {
+  return request<{ success: boolean }>(`/documents/item/${documentId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ campaignId })
+  });
+}
+
+export type RegistryExtractedField = {
+  value?: string;
+  confidence: "high" | "medium" | "low";
+  source: "content" | "metadata" | "filename" | "user";
+  evidence?: {
+    snippet: string;
+    matchedText?: string;
+  };
+};
+
+export type RegistryDocument = {
+  id: string;
+  campaignId: string;
+  createdAt: string;
+  updatedAt: string;
+  currentFileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+  title: RegistryExtractedField;
+  version: RegistryExtractedField;
+  publishedAt: RegistryExtractedField;
+  author: RegistryExtractedField;
+  sensitivity: RegistryExtractedField;
+  status: "imported" | "extracted" | "needs_review" | "validated" | "archived";
+};
+
+export type RegistryEvent = {
+  id: string;
+  campaignId: string;
+  documentId: string;
+  action: "uploaded" | "extracted" | "updated" | "validated" | "archived" | "deleted";
+  actor: "system" | "user";
+  timestamp: string;
+  details: string;
+};
+
+export function uploadRegistryDocument(campaignId: string, file: File) {
+  const formData = new FormData();
+  formData.append("campaignId", campaignId);
+  formData.append("file", file);
+  return requestForm<{ document: RegistryDocument; provider: "none" }>("/api/documents/upload", formData);
+}
+
+export function listRegistryDocuments(campaignId: string) {
+  return request<{ items: RegistryDocument[] }>(`/api/documents?campaignId=${encodeURIComponent(campaignId)}`);
+}
+
+export function getRegistryDocument(id: string) {
+  return request<{ record: RegistryDocument; events: RegistryEvent[] }>(`/api/documents/${id}`);
+}
+
+export function patchRegistryDocument(
+  id: string,
+  input: {
+    campaignId: string;
+    title?: string;
+    version?: string;
+    publishedAt?: string;
+    author?: string;
+    sensitivity?: string;
+    status?: "imported" | "extracted" | "needs_review" | "validated" | "archived";
+  }
+) {
+  return request<{ record: RegistryDocument }>(`/api/documents/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteRegistryDocument(id: string, campaignId: string) {
+  return request<{ success: boolean }>(`/api/documents/${id}`, {
+    method: "DELETE",
+    body: JSON.stringify({ campaignId })
+  });
+}
+
+export async function exportRegistryDocumentsCsv(campaignId: string) {
+  const response = await fetch(`${API_BASE}/api/documents/export?campaignId=${encodeURIComponent(campaignId)}`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
 export function saveDocumentReview(input: {
   campaignId: string;
   documentId: string;
