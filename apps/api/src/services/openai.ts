@@ -74,10 +74,85 @@ const ExtractedDocumentMetadataSchema = z.object({
   publicationDate: z.string().default(""),
   authors: z.array(z.string()).default([]),
   history: z.string().default(""),
-  pageCount: z.number().int().positive().nullable().default(null),
+  pageCount: z.number().int().nullable().default(null),
   sensitivity: z.string().default("interne"),
   summary: z.string().default("")
 });
+
+function normalizePublicationDate(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const raw = value.trim();
+  if (!raw) {
+    return "";
+  }
+
+  const isoMatch = raw.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const frMatch = raw.match(/^(\d{2})[-\/](\d{2})[-\/](\d{4})$/);
+  if (frMatch) {
+    return `${frMatch[3]}-${frMatch[2]}-${frMatch[1]}`;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeSensitivity(value: unknown): string {
+  if (typeof value !== "string") {
+    return "interne";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return "interne";
+  }
+
+  if (normalized.includes("secret")) return "secret";
+  if (normalized.includes("confident")) return "confidentiel";
+  if (normalized.includes("public")) return "public";
+  return "interne";
+}
+
+function coerceExtractedDocumentMetadata(raw: unknown): ExtractedDocumentMetadata {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+  const authorsRaw = source.authors;
+  const authors = Array.isArray(authorsRaw)
+    ? authorsRaw.map((item) => String(item ?? "").trim()).filter(Boolean)
+    : typeof authorsRaw === "string"
+    ? authorsRaw.split(/[,;\n]/).map((item) => item.trim()).filter(Boolean)
+    : [];
+
+  const pageCountRaw = source.pageCount;
+  const pageCountNumber =
+    typeof pageCountRaw === "number"
+      ? Math.trunc(pageCountRaw)
+      : typeof pageCountRaw === "string"
+      ? Number.parseInt(pageCountRaw, 10)
+      : NaN;
+
+  const candidate: ExtractedDocumentMetadata = {
+    title: String(source.title ?? "").trim(),
+    version: String(source.version ?? "").trim(),
+    publicationDate: normalizePublicationDate(source.publicationDate),
+    authors,
+    history: String(source.history ?? "").trim(),
+    pageCount: Number.isFinite(pageCountNumber) && pageCountNumber > 0 ? pageCountNumber : null,
+    sensitivity: normalizeSensitivity(source.sensitivity),
+    summary: String(source.summary ?? "").trim()
+  };
+
+  return ExtractedDocumentMetadataSchema.parse(candidate);
+}
 
 const ReferencialRequirementSchema = z.object({
   requirementId: z.string().min(1),
@@ -432,7 +507,11 @@ Règles:
     jsonText = jsonMatch[0];
   }
 
+<<<<<<< Updated upstream
   return ExtractedDocumentMetadataSchema.parse(JSON.parse(jsonText));
+=======
+  return coerceExtractedDocumentMetadata(JSON.parse(jsonText));
+>>>>>>> Stashed changes
 }
 
 async function extractAuditDocumentMetadataWithOllama(input: {
@@ -480,6 +559,10 @@ Règles:
       model: getOllamaModel(),
       prompt: userPrompt,
       system: systemPrompt,
+<<<<<<< Updated upstream
+=======
+      format: "json",
+>>>>>>> Stashed changes
       stream: false
     })
   });
@@ -488,8 +571,19 @@ Règles:
     throw new Error(`Ollama error: HTTP ${response.status}`);
   }
 
+<<<<<<< Updated upstream
   const data = (await response.json()) as { response?: string };
   const textContent = data.response || "";
+=======
+  const data = (await response.json()) as { response?: unknown };
+  const modelResponse = data.response;
+
+  if (modelResponse && typeof modelResponse === "object") {
+    return coerceExtractedDocumentMetadata(modelResponse);
+  }
+
+  const textContent = String(modelResponse ?? "").trim();
+>>>>>>> Stashed changes
   if (!textContent) {
     throw new Error("No text response from Ollama");
   }
@@ -500,7 +594,11 @@ Règles:
     jsonText = jsonMatch[0];
   }
 
+<<<<<<< Updated upstream
   return ExtractedDocumentMetadataSchema.parse(JSON.parse(jsonText));
+=======
+  return coerceExtractedDocumentMetadata(JSON.parse(jsonText));
+>>>>>>> Stashed changes
 }
 
 export async function extractAuditDocumentMetadata(input: {

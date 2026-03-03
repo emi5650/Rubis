@@ -1,0 +1,9 @@
+
+max_pages: 2
+max_slides: 3
+max_sheets: 1
+
+sensitivity_map:
+  C0: "C0 - Diffusion publique"
+  C1: "C1 - Interne"
+  SEC2: "SEC2 - Company Restricted"

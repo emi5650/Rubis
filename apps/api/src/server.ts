@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import Fastify from "fastify";
+import type { FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
@@ -16,6 +17,8 @@ import { extractAuditDocumentMetadata, generateQuestionsFromReferential, transfo
 import { parseReferentialFile, parseTabularFile } from "./services/referentialParser.js";
 import { createOutlookClient, createOutlookEvent, updateOutlookEvent, deleteOutlookEvent, buildEventPayload } from "./services/outlookSync.js";
 import { documentRegistryRoutes } from "./routes.documents.js";
+import { peopleRoutes } from "./routes.people.js";
+import { adRoutes } from "./routes.ad.js";
 
 const envDir = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(envDir, "../.env") });
@@ -83,7 +86,18 @@ function decryptSecret(record: { encrypted: string; iv: string; tag: string }) {
   return decrypted.toString("utf8");
 }
 
-async function logAction(campaignId: string, action: string, details: string) {
+function hashPassword(value: string) {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function getRequestActor(request: FastifyRequest) {
+  const rawHeader = request.headers["x-rubis-user"];
+  const rawValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+  const normalized = typeof rawValue === "string" ? rawValue.trim() : "";
+  return normalized.length > 0 ? normalized.slice(0, 80) : "system";
+}
+
+async function logAction(campaignId: string, action: string, details: string, actor = "system") {
   if (!campaignId) {
     return;
   }
@@ -92,6 +106,7 @@ async function logAction(campaignId: string, action: string, details: string) {
     id: randomUUID(),
     campaignId,
     action,
+    actor,
     timestamp: new Date().toISOString(),
     details
   });
@@ -271,7 +286,173 @@ function generateInterviewSlots(options: {
 
 app.get("/health", async () => ({ status: "ok" }));
 
+<<<<<<< Updated upstream
 await documentRegistryRoutes(app);
+=======
+app.post("/auth/login", async (request, reply) => {
+  const bodySchema = z.object({
+    username: z.string().trim().min(1),
+    password: z.string().min(1)
+  });
+
+  const body = bodySchema.parse(request.body);
+  const username = body.username.toLowerCase();
+  const passwordHash = hashPassword(body.password);
+
+  db.data.adminConfig = db.data.adminConfig || {};
+  db.data.adminConfig.users = db.data.adminConfig.users || [];
+
+  const user = db.data.adminConfig.users.find(
+    (item) => item.active !== false && item.username.toLowerCase() === username && item.passwordHash === passwordHash
+  );
+
+  if (!user) {
+    return reply.code(401).send({ message: "Identifiants invalides" });
+  }
+
+  return {
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role
+    }
+  };
+});
+
+app.get("/admin/users", async () => {
+  db.data.adminConfig = db.data.adminConfig || {};
+  db.data.adminConfig.users = db.data.adminConfig.users || [];
+
+  return db.data.adminConfig.users.map((item) => ({
+    id: item.id,
+    username: item.username,
+    displayName: item.displayName,
+    role: item.role,
+    active: item.active !== false
+  }));
+});
+
+app.post("/admin/users", async (request, reply) => {
+  const bodySchema = z.object({
+    username: z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/),
+    displayName: z.string().trim().min(2).max(80),
+    password: z.string().min(4).max(128),
+    role: z.enum(["admin", "auditeur", "lecteur"]).default("auditeur")
+  });
+
+  const body = bodySchema.parse(request.body);
+  const username = body.username.toLowerCase();
+
+  db.data.adminConfig = db.data.adminConfig || {};
+  db.data.adminConfig.users = db.data.adminConfig.users || [];
+
+  const exists = db.data.adminConfig.users.some((item) => item.username.toLowerCase() === username);
+  if (exists) {
+    return reply.code(409).send({ message: "Identifiant déjà utilisé" });
+  }
+
+  const user = {
+    id: randomUUID(),
+    username,
+    displayName: body.displayName,
+    passwordHash: hashPassword(body.password),
+    role: body.role,
+    active: true
+  };
+
+  db.data.adminConfig.users.unshift(user);
+  await db.write();
+
+  return reply.code(201).send({
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+    active: user.active
+  });
+});
+
+app.patch("/admin/users/:id", async (request, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse(request.params);
+  const body = z
+    .object({
+      displayName: z.string().trim().min(2).max(80).optional(),
+      role: z.enum(["admin", "auditeur", "lecteur"]).optional(),
+      active: z.boolean().optional()
+    })
+    .parse(request.body);
+
+  db.data.adminConfig = db.data.adminConfig || {};
+  db.data.adminConfig.users = db.data.adminConfig.users || [];
+
+  const index = db.data.adminConfig.users.findIndex((item) => item.id === params.id);
+  if (index < 0) {
+    return reply.code(404).send({ message: "Utilisateur introuvable" });
+  }
+
+  const existing = db.data.adminConfig.users[index];
+
+  const activeAdmins = db.data.adminConfig.users.filter((item) => item.active !== false && item.role === "admin");
+  const isExistingLastActiveAdmin =
+    existing.role === "admin" &&
+    existing.active !== false &&
+    activeAdmins.length === 1 &&
+    activeAdmins[0]?.id === existing.id;
+
+  const roleAfterUpdate = body.role ?? existing.role;
+  const activeAfterUpdate = body.active ?? existing.active;
+
+  if (isExistingLastActiveAdmin && (roleAfterUpdate !== "admin" || activeAfterUpdate === false)) {
+    return reply
+      .code(400)
+      .send({ message: "Impossible de désactiver ou rétrograder le dernier administrateur actif" });
+  }
+
+  const updated = {
+    ...existing,
+    displayName: body.displayName ?? existing.displayName,
+    role: body.role ?? existing.role,
+    active: body.active ?? existing.active
+  };
+
+  db.data.adminConfig.users[index] = updated;
+  await db.write();
+
+  return {
+    id: updated.id,
+    username: updated.username,
+    displayName: updated.displayName,
+    role: updated.role,
+    active: updated.active
+  };
+});
+
+app.patch("/admin/users/:id/password", async (request, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse(request.params);
+  const body = z.object({ password: z.string().min(4).max(128) }).parse(request.body);
+
+  db.data.adminConfig = db.data.adminConfig || {};
+  db.data.adminConfig.users = db.data.adminConfig.users || [];
+
+  const index = db.data.adminConfig.users.findIndex((item) => item.id === params.id);
+  if (index < 0) {
+    return reply.code(404).send({ message: "Utilisateur introuvable" });
+  }
+
+  db.data.adminConfig.users[index] = {
+    ...db.data.adminConfig.users[index],
+    passwordHash: hashPassword(body.password)
+  };
+
+  await db.write();
+  return { success: true };
+});
+
+await documentRegistryRoutes(app);
+await peopleRoutes(app);
+await adRoutes(app);
+>>>>>>> Stashed changes
 
 const projectCodePattern = /^[A-Za-z0-9_]+-\d{6}-[A-Za-z0-9_]+-[A-Za-z0-9_-]+$/;
 
@@ -298,7 +479,7 @@ app.post("/campaigns", async (request, reply) => {
 
   db.data.campaigns.unshift(campaign);
   await db.write();
-  await logAction(campaign.id, "campaign.created", campaign.name);
+  await logAction(campaign.id, "campaign.created", campaign.name, getRequestActor(request));
 
   return reply.code(201).send(campaign);
 });
@@ -465,7 +646,7 @@ app.post("/criteria", async (request, reply) => {
 
   db.data.criteria.push(criterion);
   await db.write();
-  await logAction(criterion.campaignId, "criterion.created", `${criterion.code} - ${criterion.title}`);
+  await logAction(criterion.campaignId, "criterion.created", `${criterion.code} - ${criterion.title}`, getRequestActor(request));
 
   return reply.code(201).send(criterion);
 });
@@ -523,7 +704,7 @@ app.post("/questions", async (request, reply) => {
 
   db.data.questions.push(question);
   await db.write();
-  await logAction(question.campaignId, "question.created", question.id);
+  await logAction(question.campaignId, "question.created", question.id, getRequestActor(request));
 
   return reply.code(201).send(question);
 });
@@ -562,7 +743,7 @@ app.post("/documents", async (request, reply) => {
 
   db.data.documents.push(document);
   await db.write();
-  await logAction(document.campaignId, "document.created", document.name);
+  await logAction(document.campaignId, "document.created", document.name, getRequestActor(request));
 
   return reply.code(201).send(document);
 });
@@ -740,7 +921,11 @@ app.post("/documents/confirm-upload", async (request, reply) => {
     db.data.documents.unshift(document);
     pendingDocumentUploads.delete(body.tempUploadId);
     await db.write();
+<<<<<<< Updated upstream
     await logAction(body.campaignId, "document.created.ai", `${document.internalId} - ${document.name}`);
+=======
+    await logAction(body.campaignId, "document.created.ai", `${document.internalId} - ${document.name}`, getRequestActor(request));
+>>>>>>> Stashed changes
 
     return reply.code(201).send(document);
   } catch (error) {
@@ -803,7 +988,12 @@ app.put("/documents/item/:documentId", async (request, reply) => {
   await logAction(
     body.campaignId,
     "document.updated",
+<<<<<<< Updated upstream
     `${existing.internalId || existing.id} - ${existing.name} -> ${body.name}`
+=======
+    `${existing.internalId || existing.id} - ${existing.name} -> ${body.name}`,
+    getRequestActor(request)
+>>>>>>> Stashed changes
   );
 
   return reply.code(200).send(db.data.documents[index]);
@@ -833,7 +1023,12 @@ app.delete("/documents/item/:documentId", async (request, reply) => {
   await logAction(
     campaignId,
     "document.deleted",
+<<<<<<< Updated upstream
     `${existing.internalId || existing.id} - ${existing.name}`
+=======
+    `${existing.internalId || existing.id} - ${existing.name}`,
+    getRequestActor(request)
+>>>>>>> Stashed changes
   );
 
   return reply.code(200).send({ success: true });
@@ -1099,7 +1294,7 @@ app.post("/audit-plans/:campaignId/generate-slots", async (request, reply) => {
 
   db.data.interviewSlots.push(...createdSlots);
   await db.write();
-  await logAction(campaignId, "audit-plan.slots-generated", `${createdSlots.length} slots`);
+  await logAction(campaignId, "audit-plan.slots-generated", `${createdSlots.length} slots`, getRequestActor(request));
 
   return reply.code(201).send({ count: createdSlots.length, slots: createdSlots });
 });
@@ -1143,7 +1338,7 @@ app.post("/outlook/sync-slot/:slotId", async (request, reply) => {
         return reply.code(500).send({ message: `Outlook update failed: ${updateResult.error}` });
       }
 
-      await logAction(slot.campaignId, "outlook.event-updated", slot.title);
+      await logAction(slot.campaignId, "outlook.event-updated", slot.title, getRequestActor(request));
       return reply.send({ success: true, eventId: slot.outlookEventId, action: "updated" });
     } else {
       const createResult = await createOutlookEvent(client, payload);
@@ -1154,7 +1349,7 @@ app.post("/outlook/sync-slot/:slotId", async (request, reply) => {
       slot.outlookEventId = createResult.eventId || "";
       slot.outlookSyncEnabled = true;
       await db.write();
-      await logAction(slot.campaignId, "outlook.event-created", slot.title);
+      await logAction(slot.campaignId, "outlook.event-created", slot.title, getRequestActor(request));
 
       return reply.send({ success: true, eventId: createResult.eventId, webLink: createResult.webLink, action: "created" });
     }
@@ -1193,7 +1388,7 @@ app.delete("/outlook/sync-slot/:slotId", async (request, reply) => {
     slot.outlookEventId = "";
     slot.outlookSyncEnabled = false;
     await db.write();
-    await logAction(slot.campaignId, "outlook.event-deleted", slot.title);
+    await logAction(slot.campaignId, "outlook.event-deleted", slot.title, getRequestActor(request));
 
     return reply.send({ success: true, action: "deleted" });
   } catch (error) {
@@ -1313,7 +1508,7 @@ app.post("/interview-notes", async (request, reply) => {
 
   db.data.interviewNotes.push(note);
   await db.write();
-  await logAction(note.campaignId, "interview-note.created", note.id);
+  await logAction(note.campaignId, "interview-note.created", note.id, getRequestActor(request));
 
   return reply.code(201).send(note);
 });
@@ -1471,7 +1666,7 @@ app.post("/interview-answers", async (request, reply) => {
   }
 
   await db.write();
-  await logAction(answer.campaignId, "interview-answer.saved", answer.questionId);
+  await logAction(answer.campaignId, "interview-answer.saved", answer.questionId, getRequestActor(request));
   return reply.code(201).send(answer);
 });
 
@@ -1680,7 +1875,7 @@ app.post("/audit-reports/generate/:campaignId", async (request, reply) => {
 
   db.data.auditReports.unshift(report);
   await db.write();
-  await logAction(campaignId, "audit-report.generated", report.id);
+  await logAction(campaignId, "audit-report.generated", report.id, getRequestActor(request));
 
   return reply.code(201).send(report);
 });
@@ -1835,7 +2030,8 @@ app.post("/generate-questions-from-referential", async (request, reply) => {
     await logAction(
       campaignId,
       "generate_questions_from_referential",
-      `Generated ${questions.length} questions from ${parsed.fileType.toUpperCase()} - ${parsed.title}`
+      `Generated ${questions.length} questions from ${parsed.fileType.toUpperCase()} - ${parsed.title}`,
+      getRequestActor(request)
     );
 
     return {

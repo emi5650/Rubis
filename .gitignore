@@ -8,6 +8,7 @@ dist/
 coverage/
 .vscode/*.log
 *.tsbuildinfo
+.cache/
 
 # Local runtime data
 apps/api/data/uploads/

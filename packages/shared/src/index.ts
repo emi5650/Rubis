@@ -20,4 +20,4 @@ export interface QuestionGenerationPayload {
   language: Language;
 }
 
-export * from "./types/documentRegistry";
+export * from "./types/documentRegistry.js";

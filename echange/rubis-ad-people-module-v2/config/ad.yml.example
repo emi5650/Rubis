@@ -1,0 +1,6 @@
+
+RUBIS_AD_URL: "ldaps://dc1.corp.local:636"
+RUBIS_AD_BASE_DN: "DC=corp,DC=local"
+RUBIS_AD_BIND_DN: "CN=rubis_svc,OU=ServiceAccounts,DC=corp,DC=local"
+RUBIS_AD_TIMEOUT_MS: 8000
+RUBIS_AD_STRICT_LDAPS: true

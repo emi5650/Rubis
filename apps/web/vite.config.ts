@@ -7,7 +7,9 @@ export default defineConfig({
     extensions: [".tsx", ".ts", ".jsx", ".js", ".json"]
   },
   server: {
+    host: true,
     port: 5173,
-    strictPort: true
+    strictPort: true,
+    allowedHosts: ["rubis", "rubis.localhost"]
   }
 });

@@ -1,0 +1,9 @@
+
+rgpd:
+  enabled: true
+  strict_purpose_required: true
+  default_retention_days: 365
+  soft_delete_only: true
+  purge_schedule:
+    enabled: true
+    cron: "0 3 * * *"
