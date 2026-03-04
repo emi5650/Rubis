@@ -1,8 +1,15 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import { getOllamaModel, getOpenAiApiKey } from "../server.js";
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+
+function getConfiguredOpenAiApiKey() {
+  return process.env.OPENAI_API_KEY || "";
+}
+
+function getConfiguredOllamaModel() {
+  return process.env.OLLAMA_MODEL || "mistral";
+}
 
 export interface GenerateQuestionsInput {
   referentialContent: string;
@@ -68,6 +75,26 @@ export interface ExtractedDocumentMetadataResult {
   provider: "ollama" | "openai";
 }
 
+export const CitationSchema = z.object({
+  chunkId: z.string().min(1),
+  docId: z.string().min(1),
+  docTitle: z.string().min(1),
+  page: z.number().int().nullable().optional(),
+  section: z.string().optional(),
+  excerpt: z.string().min(1)
+});
+
+export const ControlFindingSchema = z.object({
+  controlId: z.string().min(1),
+  referentialId: z.string().min(1),
+  status: z.enum(["CONFORME", "PARTIEL", "NON_CONFORME", "INDETERMINE"]),
+  rationale: z.string().min(1),
+  citations: z.array(CitationSchema),
+  confidence: z.number().min(0).max(1),
+  evidenceGaps: z.array(z.string()).default([]),
+  followUpQuestions: z.array(z.string()).default([])
+});
+
 const ExtractedDocumentMetadataSchema = z.object({
   title: z.string().default(""),
   version: z.string().default(""),
@@ -106,7 +133,7 @@ const ReferencialImportSchema = z.object({
 });
 
 function createOpenAiClient() {
-  const apiKey = getOpenAiApiKey() || process.env.OPENAI_API_KEY || "";
+  const apiKey = getConfiguredOpenAiApiKey();
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY not configured");
   }
@@ -160,7 +187,7 @@ Return ONLY valid JSON with no markdown formatting or additional text.`;
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: getOllamaModel(),
+        model: getConfiguredOllamaModel(),
         prompt: userPrompt,
         system: systemPrompt,
         stream: false
@@ -194,7 +221,7 @@ export async function generateQuestionsFromReferential(
   input: GenerateQuestionsInput
 ): Promise<GeneratedQuestion[]> {
   // Try OpenAI first if configured
-  if (getOpenAiApiKey() || process.env.OPENAI_API_KEY) {
+  if (getConfiguredOpenAiApiKey()) {
     try {
       return await generateQuestionsFromOpenAI(input);
     } catch (openaiError) {
@@ -477,7 +504,7 @@ Règles:
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: getOllamaModel(),
+      model: getConfiguredOllamaModel(),
       prompt: userPrompt,
       system: systemPrompt,
       stream: false
@@ -516,10 +543,122 @@ export async function extractAuditDocumentMetadata(input: {
     return { metadata, provider: "ollama" };
   }
 
-  if (getOpenAiApiKey() || process.env.OPENAI_API_KEY) {
+  if (getConfiguredOpenAiApiKey()) {
     const metadata = await extractAuditDocumentMetadataWithOpenAI(input);
     return { metadata, provider: "openai" };
   }
 
   throw new Error("No AI provider available: configure Ollama or OpenAI");
+}
+
+export async function generateAuditFindingStrictJSON<T>(input: {
+  control: {
+    controlId: string;
+    referentialId: string;
+    text: string;
+  };
+  contextText: string;
+  citations: Array<{
+    chunkId: string;
+    docId: string;
+    docTitle: string;
+    page?: number | null;
+    section?: string;
+    excerpt: string;
+  }>;
+  outputSchema: z.ZodType<T>;
+}): Promise<T> {
+  const allowedChunkIds = new Set(input.citations.map((citation) => citation.chunkId));
+
+  const strictPrompt = `You are an audit assistant.
+Return JSON ONLY.
+Never invent citations.
+Use only chunkId values from the provided citation list.
+If evidence is missing or ambiguous, set status=INDETERMINE and fill evidenceGaps + followUpQuestions.`;
+
+  const userPrompt = `Control metadata:
+- controlId: ${input.control.controlId}
+- referentialId: ${input.control.referentialId}
+- controlText: ${input.control.text}
+
+Allowed citations (you must only use these chunkId/docId pairs):
+${JSON.stringify(input.citations, null, 2)}
+
+Retrieved context:
+${input.contextText}
+
+Required output JSON schema fields:
+- controlId
+- referentialId
+- status in [CONFORME, PARTIEL, NON_CONFORME, INDETERMINE]
+- rationale
+- citations[]
+- confidence (0..1)
+- evidenceGaps[]
+- followUpQuestions[]`;
+
+  const parseAndValidate = (rawText: string) => {
+    const match = rawText.match(/\{[\s\S]*\}/);
+    const jsonText = match ? match[0] : rawText;
+    const parsed = JSON.parse(jsonText) as {
+      citations?: Array<{ chunkId?: string }>;
+    };
+
+    for (const citation of parsed.citations || []) {
+      if (!citation.chunkId || !allowedChunkIds.has(citation.chunkId)) {
+        throw new Error("Invalid citation chunkId in model output");
+      }
+    }
+
+    return input.outputSchema.parse(parsed);
+  };
+
+  const openAiConfigured = Boolean(getConfiguredOpenAiApiKey());
+  if (openAiConfigured) {
+    const client = createOpenAiClient();
+
+    const runOnce = async (extraInstruction = "") => {
+      const response = await client.chat.completions.create({
+        model: process.env.OPENAI_MODEL || "gpt-4o",
+        max_tokens: 1800,
+        messages: [
+          { role: "system", content: strictPrompt },
+          {
+            role: "user",
+            content: extraInstruction ? `${userPrompt}\n\n${extraInstruction}` : userPrompt
+          }
+        ]
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error("No text response from OpenAI");
+      }
+      return parseAndValidate(content);
+    };
+
+    try {
+      return await runOnce();
+    } catch {
+      return await runOnce(
+        "RETRY: Respond with strict JSON only and ensure each citation.chunkId is one of the provided allowed chunkId values."
+      );
+    }
+  }
+
+  const fallback = {
+    controlId: input.control.controlId,
+    referentialId: input.control.referentialId,
+    status: "INDETERMINE",
+    rationale: "Modèle IA indisponible pour évaluer ce contrôle automatiquement.",
+    citations: input.citations.slice(0, 1),
+    confidence: 0,
+    evidenceGaps: ["Aucune évaluation IA réalisée (provider indisponible)."],
+    followUpQuestions: [
+      "Pouvez-vous fournir des éléments de preuve complémentaires ?",
+      "Qui valide la conformité de ce contrôle et à quelle fréquence ?"
+    ]
+  };
+
+  return input.outputSchema.parse(fallback);
 }

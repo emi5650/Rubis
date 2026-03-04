@@ -16,6 +16,7 @@ import { extractAuditDocumentMetadata, generateQuestionsFromReferential, transfo
 import { parseReferentialFile, parseTabularFile } from "./services/referentialParser.js";
 import { createOutlookClient, createOutlookEvent, updateOutlookEvent, deleteOutlookEvent, buildEventPayload } from "./services/outlookSync.js";
 import { documentRegistryRoutes } from "./routes.documents.js";
+import { auditRoutes } from "./routes/audit.js";
 
 const envDir = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(envDir, "../.env") });
@@ -107,6 +108,7 @@ let currentOpenAiKey = "";
 if (db.data.adminConfig?.openAiKey) {
   try {
     currentOpenAiKey = decryptSecret(db.data.adminConfig.openAiKey);
+    process.env.OPENAI_API_KEY = currentOpenAiKey;
   } catch (error) {
     app.log.warn("Failed to decrypt OpenAI key from storage");
   }
@@ -272,6 +274,7 @@ function generateInterviewSlots(options: {
 app.get("/health", async () => ({ status: "ok" }));
 
 await documentRegistryRoutes(app);
+await auditRoutes(app);
 
 const projectCodePattern = /^[A-Za-z0-9_]+-\d{6}-[A-Za-z0-9_]+-[A-Za-z0-9_-]+$/;
 
@@ -1872,6 +1875,7 @@ app.post("/admin/openai-key", async (request, reply) => {
     };
 
     currentOpenAiKey = body.apiKey;
+    process.env.OPENAI_API_KEY = body.apiKey;
     await db.write();
 
     return reply.code(200).send({ configured: true });
@@ -2584,6 +2588,7 @@ app.post("/config", async (request, reply) => {
 
   const body = bodySchema.parse(request.body);
   currentOllamaModel = body.ollamaModel;
+  process.env.OLLAMA_MODEL = body.ollamaModel;
   
   app.log.info(`Ollama model changed to: ${currentOllamaModel}`);
   

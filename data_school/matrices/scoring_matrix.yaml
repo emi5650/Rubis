@@ -1,0 +1,15 @@
+# Matrice de scoring déterministe (POC)
+statusScores:
+  CONFORME: 100
+  PARTIEL: 50
+  NON_CONFORME: 0
+  INDETERMINE: 25
+
+defaultControlWeight: 1
+
+domainWeights:
+  gouvernance: 1
+  acces: 1
+  exploitation: 1
+  continuite: 1
+  general: 1
