@@ -301,6 +301,82 @@ export function deleteRegistryDocument(id: string, campaignId: string) {
   });
 }
 
+export type AuditFinding = {
+  controlId: string;
+  referentialId: string;
+  status: "CONFORME" | "PARTIEL" | "NON_CONFORME" | "INDETERMINE";
+  rationale: string;
+  citations: Array<{
+    chunkId: string;
+    docId: string;
+    docTitle: string;
+    page?: number | null;
+    section?: string;
+    excerpt: string;
+  }>;
+  confidence: number;
+  evidenceGaps: string[];
+  followUpQuestions: string[];
+  updatedAt: string;
+};
+
+export function createAudit(input: { name: string; referentialId: string }) {
+  return request<{ id: string; name: string; referentialId: string }>("/api/audits", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function ingestAudit(auditId: string, input: { folderPath: string }) {
+  return request<{
+    auditId: string;
+    ingest: {
+      auditId: string;
+      ingestedDocuments: number;
+      ingestedChunks: number;
+      skippedFiles: string[];
+    };
+  }>(`/api/audits/${auditId}/ingest`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function runAudit(
+  auditId: string,
+  input?: {
+    referentialId?: string;
+    controls?: Array<{ id: string; text: string; domain?: string }>;
+  }
+) {
+  return request<{ auditId: string; findingsCount: number; globalScore: number }>(`/api/audits/${auditId}/run`, {
+    method: "POST",
+    body: JSON.stringify(input || {})
+  });
+}
+
+export function getAuditFindings(auditId: string) {
+  return request<{ auditId: string; findings: AuditFinding[] }>(`/api/audits/${auditId}/findings`);
+}
+
+export function getAuditScore(auditId: string) {
+  return request<{ auditId: string; score: { globalScore: number } | null }>(`/api/audits/${auditId}/score`);
+}
+
+export function getAuditReport(auditId: string) {
+  return request<{
+    auditId: string;
+    report: string;
+    attackPaths: Array<{
+      id: string;
+      title: string;
+      relatedControlIds: string[];
+      riskLevel: "low" | "medium" | "high";
+      summary: string;
+    }>;
+  }>(`/api/audits/${auditId}/report`);
+}
+
 export async function exportRegistryDocumentsCsv(campaignId: string) {
   const response = await fetch(`${API_BASE}/api/documents/export?campaignId=${encodeURIComponent(campaignId)}`);
   if (!response.ok) {

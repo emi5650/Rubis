@@ -38,6 +38,13 @@ export const MENU_ENTRIES: MenuEntry[] = [
     description: "Référentiel documentaire avec extraction IA, validation et traçabilité."
   },
   {
+    id: "audit-poc",
+    label: "Audit POC",
+    path: "/audit-poc",
+    icon: FiSearch,
+    description: "Exécution POC RAG ISO19011 et visualisation des constats."
+  },
+  {
     id: "entretiens",
     label: "Entretiens",
     path: "/entretiens",

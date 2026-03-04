@@ -2,10 +2,10 @@ import { FiClipboard, FiFileText, FiSearch, FiSettings, FiUsers, FiEdit3, FiShie
 export const MENU_ENTRIES = [
     {
         id: "preliminaire",
-        label: "Préliminaire",
-        path: "/preliminaire",
+        label: "Organisation",
+        path: "/organisation",
         icon: FiClipboard,
-        description: "Cadrage initial, contexte et ouverture de campagne."
+        description: "Convention (optionnelle), note de cadrage et plan d’audit."
     },
     {
         id: "preparation",
@@ -20,6 +20,20 @@ export const MENU_ENTRIES = [
         path: "/analyse-documentaire",
         icon: FiSearch,
         description: "Collecte, revue et qualification des preuves documentaires."
+    },
+    {
+        id: "document-registry",
+        label: "Document Registry",
+        path: "/document-registry",
+        icon: FiSearch,
+        description: "Référentiel documentaire avec extraction IA, validation et traçabilité."
+    },
+    {
+        id: "audit-poc",
+        label: "Audit POC",
+        path: "/audit-poc",
+        icon: FiSearch,
+        description: "Exécution POC RAG ISO19011 et visualisation des constats."
     },
     {
         id: "entretiens",
