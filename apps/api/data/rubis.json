@@ -5,21 +5,24 @@
       "name": "Test",
       "language": "fr",
       "framework": "HDS",
-      "createdAt": "2026-02-23T08:09:48.348Z"
+      "createdAt": "2026-02-23T08:09:48.348Z",
+      "projectCode": ""
     },
     {
       "id": "a183fbbf-bd60-49eb-98fb-9a14ddfe34db",
       "name": "Test",
       "language": "fr",
       "framework": "PASSI",
-      "createdAt": "2026-02-20T15:19:19.324Z"
+      "createdAt": "2026-02-20T15:19:19.324Z",
+      "projectCode": ""
     },
     {
       "id": "0364c001-ca50-4be5-8ef3-9ccdf5144cce",
       "name": "Campagne Démo Rubis",
       "language": "fr",
       "framework": "PASSI v2.2",
-      "createdAt": "2026-02-20T14:52:59.826Z"
+      "createdAt": "2026-02-20T14:52:59.826Z",
+      "projectCode": ""
     }
   ],
   "criteria": [
@@ -337,5 +340,14 @@
       "timestamp": "2026-02-20T14:57:57.787Z",
       "details": "cb0bdbb5-6d09-468c-ad78-d7d501fb668b"
     }
-  ]
+  ],
+  "auditTeams": [],
+  "referentialDocuments": [],
+  "referentials": [],
+  "referentialRequirements": [],
+  "documentRegistry": [],
+  "documentRegistryEvents": [],
+  "adminConfig": {
+    "auditDirectory": []
+  }
 }

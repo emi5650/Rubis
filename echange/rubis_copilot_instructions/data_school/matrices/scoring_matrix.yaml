@@ -1,0 +1,13 @@
+# scoring_matrix.yaml (POC)
+weightsByStatus:
+  CONFORME: 1
+  PARTIEL: 0.5
+  NON_CONFORME: 0
+  NON_APPLICABLE: null
+  INDETERMINE: null
+
+# domainWeights (optionnel)
+# domainWeights:
+#   Gouvernance: 1
+#   Acces: 1
+#   Logs: 1

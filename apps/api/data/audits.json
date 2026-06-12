@@ -1,0 +1,92 @@
+{
+  "audits": [
+    {
+      "id": "bb50abb9-e07e-4f58-ad83-cf9bdd1cf2b6",
+      "name": "POC 05/03/2026 10:07:43",
+      "referentialId": "POC-SCHOOL",
+      "createdAt": "2026-03-05T09:07:43.402Z",
+      "updatedAt": "2026-03-05T09:08:03.448Z",
+      "findings": [
+        {
+          "controlId": "CTRL-DOC-01",
+          "referentialId": "POC-SCHOOL",
+          "status": "INDETERMINE",
+          "rationale": "Aucune preuve documentaire récupérée pour ce contrôle.",
+          "citations": [],
+          "confidence": 0,
+          "evidenceGaps": [
+            "Preuves absentes dans le corpus documentaire."
+          ],
+          "followUpQuestions": [
+            "Pouvez-vous fournir un document décrivant ce contrôle ?",
+            "Quel est le responsable de la mise en oeuvre de ce contrôle ?"
+          ],
+          "updatedAt": "2026-03-05T09:08:03.446Z"
+        },
+        {
+          "controlId": "CTRL-DOC-02",
+          "referentialId": "POC-SCHOOL",
+          "status": "INDETERMINE",
+          "rationale": "Aucune preuve documentaire récupérée pour ce contrôle.",
+          "citations": [],
+          "confidence": 0,
+          "evidenceGaps": [
+            "Preuves absentes dans le corpus documentaire."
+          ],
+          "followUpQuestions": [
+            "Pouvez-vous fournir un document décrivant ce contrôle ?",
+            "Quel est le responsable de la mise en oeuvre de ce contrôle ?"
+          ],
+          "updatedAt": "2026-03-05T09:08:03.447Z"
+        }
+      ],
+      "score": {
+        "globalScore": 25,
+        "byDomain": [
+          {
+            "domain": "gouvernance",
+            "score": 25
+          },
+          {
+            "domain": "acces",
+            "score": 25
+          }
+        ],
+        "byControl": [
+          {
+            "controlId": "CTRL-DOC-01",
+            "score": 25
+          },
+          {
+            "controlId": "CTRL-DOC-02",
+            "score": 25
+          }
+        ]
+      },
+      "attackPaths": [],
+      "reportMarkdown": "# Rapport d'audit documentaire — POC 05/03/2026 10:07:43\n\n## 1. Objectif\nÉvaluer la conformité documentaire et la maturité des contrôles selon une approche ISO 19011.\n\n## 2. Périmètre\nRéférentiel: POC-SCHOOL\nNombre de contrôles évalués: 2\n\n## 3. Méthodologie\n- Revue documentaire (RAG) par contrôle\n- Traçabilité par citations obligatoires\n- Scoring déterministe basé matrice YAML\n- Validation finale réservée à l'auditeur\n\n## 4. Constats\n- CTRL-DOC-01 — INDETERMINE (confiance 0%)\n- CTRL-DOC-02 — INDETERMINE (confiance 0%)\n\n## 5. Scoring\nScore global: 25\n- gouvernance: 25\n- acces: 25\n\n## 6. Attack paths (haut niveau)\n- Aucun chemin d'attaque significatif identifié sur ce lot.\n\n## 7. Conclusion\nLes résultats sont proposés par IA et doivent être validés/ajustés par l’auditeur.\nAucune conclusion n’est retenue sans preuve citée.\n\n## Annexe A — Constats (CSV)\n```csv\n\"controlId\",\"status\",\"confidence\",\"citations\",\"gaps\"\n\"CTRL-DOC-01\",\"INDETERMINE\",\"0\",\"0\",\"Preuves absentes dans le corpus documentaire.\"\n\"CTRL-DOC-02\",\"INDETERMINE\",\"0\",\"0\",\"Preuves absentes dans le corpus documentaire.\"\n```\n\n## Annexe B — Questions complémentaires (CSV)\n```csv\n\"controlId\",\"question\"\n\"CTRL-DOC-01\",\"Pouvez-vous fournir un document décrivant ce contrôle ?\"\n\"CTRL-DOC-01\",\"Quel est le responsable de la mise en oeuvre de ce contrôle ?\"\n\"CTRL-DOC-02\",\"Pouvez-vous fournir un document décrivant ce contrôle ?\"\n\"CTRL-DOC-02\",\"Quel est le responsable de la mise en oeuvre de ce contrôle ?\"\n```\n"
+    },
+    {
+      "id": "fc3c1893-6be4-46c4-8e12-cfc859248fda",
+      "name": "diag-ui",
+      "referentialId": "POC-SCHOOL",
+      "createdAt": "2026-03-05T08:37:19.596Z",
+      "updatedAt": "2026-03-05T08:37:19.596Z",
+      "findings": [],
+      "score": null,
+      "attackPaths": [],
+      "reportMarkdown": ""
+    },
+    {
+      "id": "41c32c11-6264-4cb2-af6d-5c92a9bf3995",
+      "name": "diag",
+      "referentialId": "POC-SCHOOL",
+      "createdAt": "2026-03-04T17:58:52.033Z",
+      "updatedAt": "2026-03-04T17:58:52.033Z",
+      "findings": [],
+      "score": null,
+      "attackPaths": [],
+      "reportMarkdown": ""
+    }
+  ]
+}
